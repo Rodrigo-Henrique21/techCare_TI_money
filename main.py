@@ -1,7 +1,7 @@
 import os
 import traceback
 import requests
-import investpy
+import yfinance as yf
 import pandas as pd
 import sgs
 import time
@@ -20,23 +20,36 @@ class ExtratorB3:
     def __init__(self, data_path, tickers, data_inicio=None, data_fim=None):
         self.data_path = data_path
         self.tickers = tickers
-        self.data_inicio = data_inicio or '01/01/2015'
-        self.data_fim = data_fim or datetime.today().strftime('%d/%m/%Y')
+        self.data_inicio = datetime.strptime(data_inicio or '01/01/2015', '%d/%m/%Y') if isinstance(data_inicio, str) else data_inicio
+        self.data_fim = datetime.strptime(data_fim or datetime.today().strftime('%d/%m/%Y'), '%d/%m/%Y') if isinstance(data_fim, str) else data_fim
         os.makedirs(self.data_path, exist_ok=True)
 
     def extrair(self):
         for ticker in self.tickers:
             try:
-                print(f"[B3] Baixando {ticker} de {self.data_inicio} a {self.data_fim} (via investpy)...")
-                df = investpy.get_stock_historical_data(
-                    stock=ticker,
-                    country='brazil',
-                    from_date=self.data_inicio,
-                    to_date=self.data_fim
-                )
+                ticker_sa = f"{ticker}.SA"  # Adiciona o sufixo .SA para ações brasileiras
+                print(f"[B3] Baixando {ticker} de {self.data_inicio.strftime('%d/%m/%Y')} a {self.data_fim.strftime('%d/%m/%Y')} (via yfinance)...")
+                
+                # Baixa os dados usando yfinance
+                acao = yf.Ticker(ticker_sa)
+                df = acao.history(start=self.data_inicio, end=self.data_fim)
+                
                 if not df.empty:
+                    # Renomeia as colunas para manter compatibilidade
+                    df = df.rename(columns={
+                        'Open': 'Open',
+                        'High': 'High',
+                        'Low': 'Low',
+                        'Close': 'Close',
+                        'Volume': 'Volume',
+                        'Dividends': 'Dividends',
+                        'Stock Splits': 'Stock_Splits'
+                    })
+                    
                     df.reset_index(inplace=True)
-                    file_path = os.path.join(self.data_path, f'b3_{ticker}_{self.data_inicio.replace("/","")}_{self.data_fim.replace("/","")}.parquet')
+                    df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
+                    
+                    file_path = os.path.join(self.data_path, f'b3_{ticker}_{self.data_inicio.strftime("%d%m%Y")}_{self.data_fim.strftime("%d%m%Y")}.parquet')
                     df.to_parquet(file_path, index=False)
                     print(f"[B3] Dados salvos em Parquet: {file_path}")
                 else:
@@ -230,11 +243,16 @@ class ExtratorBacen(ExtratorBase):
         'ipca': 433,
         'poupanca': 195
     }
+    def __init__(self, data_path, data_inicio='2010-01-01', data_fim=None):
+        super().__init__(data_path)
+        self.data_inicio = data_inicio
+        self.data_fim = data_fim or datetime.today().strftime('%Y-%m-%d')
+
     def extrair(self):
         for nome, codigo in self.SERIES.items():
             try:
                 print(f"[BACEN] Baixando {nome}...")
-                df = sgs.dataframe(codigo)
+                df = sgs.dataframe(codigo, start=self.data_inicio, end=self.data_fim)
                 filepath = os.path.join(self.data_path, f'bacen_{nome}.csv')
                 df.to_csv(filepath)
                 print(f"[BACEN] Salvo: {filepath}")
@@ -284,7 +302,7 @@ class PipelineExtracao:
             ExtratorRentabilidadeTesouroWebscraping(self.data_path),
             ExtratorCustosTesouroAPI(data_path, anos=list(range(2014, 2024))), # exemplo: últimos 10 anos
             ExtratorSadipemAPI(data_path, anos=[2019, 2020, 2021, 2022, 2023]), # exemplo: 5 anos
-            ExtratorBacen(self.data_path),
+            ExtratorBacen(self.data_path, data_inicio='2010-01-01'),
             ExtratorCVM(self.data_path),
             ExtratorIBGE(self.data_path),
         ]

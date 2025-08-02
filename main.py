@@ -7,6 +7,8 @@ import sgs
 import time
 from bs4 import BeautifulSoup
 from datetime import datetime
+import shutil
+from upload_blob import upload_directory
 
 
 class ExtratorBase:
@@ -322,4 +324,7 @@ if __name__ == "__main__":
     data_fim = datetime.today().strftime('%d/%m/%Y')
     pipeline = PipelineExtracao(DATA_PATH, TICKERS, data_inicio, data_fim)
     pipeline.rodar()
+    print("\nPipeline concluído!")
+    upload_directory(DATA_PATH, "raw/")
+    shutil.rmtree(DATA_PATH, ignore_errors=True)
     print("\nPipeline concluído!")

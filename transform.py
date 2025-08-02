@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 from datetime import datetime
+import shutil
+from upload_blob import download_directory, upload_directory
 
 class TransformadorBase:
     def __init__(self, raw_path, silver_path):
@@ -199,4 +201,11 @@ if __name__ == "__main__":
     
     pipeline = PipelineTransformacao(RAW_PATH, SILVER_PATH)
     pipeline.rodar()
+    print("\nTransformação concluída!")
+    download_directory("raw/", RAW_PATH)
+    pipeline = PipelineTransformacao(RAW_PATH, SILVER_PATH)
+    pipeline.rodar()
+    upload_directory(SILVER_PATH, "silver/")
+    shutil.rmtree(RAW_PATH, ignore_errors=True)
+    shutil.rmtree(SILVER_PATH, ignore_errors=True)
     print("\nTransformação concluída!")

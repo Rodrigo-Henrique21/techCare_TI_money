@@ -1,45 +1,62 @@
+
 import datetime
 import logging
 import azure.functions as func
 from extracao import PipelineExtracao
 from transform import PipelineTransformacao
 import os
+from azure.monitor.opentelemetry import configure_azure_monitor
+
+# Configuração avançada de logger
+logger = logging.getLogger("techcare.pipeline")
+logger.setLevel(logging.INFO)
+configure_azure_monitor()
+
 
 app = func.FunctionApp()
 
-@app.schedule(schedule="0 20 4 * * *", arg_name="myTimer", run_on_startup=True,
+@app.schedule(schedule="0 50 4 * * *", arg_name="myTimer", run_on_startup=True,
               use_monitor=False) 
 def run_pipeline(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.datetime.utcnow().replace(
         tzinfo=datetime.timezone.utc).isoformat()
 
-    if myTimer.past_due:
-        logging.info('The timer is past due!')
+    logger.info(f"Pipeline iniciado em {utc_timestamp}")
 
-    logging.info('Python timer trigger function executed at %s', utc_timestamp)
+    if myTimer.past_due:
+        logger.warning('Execução atrasada! O timer está past due.')
+
+    logger.info('Iniciando execução do pipeline completo')
     
     # Configurações
     TICKERS = ['PETR4', 'VALE3', 'ITUB4', 'BBDC4', 'BBAS3']
     data_inicio = '01/01/2019'
     data_fim = datetime.datetime.today().strftime('%d/%m/%Y')
+    logger.info(f"Configurações: Tickers={TICKERS}, Período={data_inicio} até {data_fim}")
 
     try:
         # Pipeline de Extração
+        logger.info("Iniciando pipeline de extração...")
         pipeline_extracao = PipelineExtracao(None, TICKERS, data_inicio, data_fim)
         pipeline_extracao.rodar()
-        logging.info("Pipeline de extração concluído com sucesso!")
+        logger.info("Pipeline de extração concluído com sucesso!")
 
         # Pipeline de Transformação
+        logger.info("Iniciando pipeline de transformação...")
         pipeline_transformacao = PipelineTransformacao(None, None)
         pipeline_transformacao.rodar()
-        logging.info("Pipeline de transformação concluído com sucesso!")
+        logger.info("Pipeline de transformação concluído com sucesso!")
 
         # Pipeline de Análise (camada gold)
         from analysis import IntegradorDados
+        logger.info("Iniciando pipeline de análise...")
         integrador = IntegradorDados()
         integrador.executar_analises()
-        logging.info("Pipeline de análise concluído com sucesso!")
+        logger.info("Pipeline de análise concluído com sucesso!")
+        
+        logger.info("Pipeline completo executado com sucesso!")
 
     except Exception as e:
-        logging.error(f"Erro durante a execução do pipeline: {str(e)}")
+        logger.error(f"Erro durante a execução do pipeline: {str(e)}", exc_info=True)
+        logger.exception("Stack trace completo do erro:")
         raise

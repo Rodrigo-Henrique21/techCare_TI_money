@@ -1,4 +1,6 @@
+
 from azure.storage.blob import BlobServiceClient
+from azure.identity import DefaultAzureCredential
 import os
 import logging
 import io
@@ -7,12 +9,13 @@ from datetime import datetime
 
 class AzureStorageManager:
     def __init__(self):
-        self.connection_string = os.environ.get("AzureWebJobsStorage")
-        if not self.connection_string:
-            raise ValueError("AzureWebJobsStorage connection string não encontrada nas variáveis de ambiente")
-        
-        self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
-        self.container_client = self.blob_service_client.get_container_client("stgdataprojecttimeseries")
+        account_url = os.environ.get("AzureWebJobsStorage_blobServiceUri")
+        container_name = "stgdataprojecttimeseries"
+        if not account_url:
+            raise ValueError("AzureWebJobsStorage_blobServiceUri não encontrada nas variáveis de ambiente")
+        credential = DefaultAzureCredential()
+        self.blob_service_client = BlobServiceClient(account_url, credential=credential)
+        self.container_client = self.blob_service_client.get_container_client(container_name)
         
     def save_dataframe(self, df, layer: str, name: str, format: str = 'parquet') -> None:
         """

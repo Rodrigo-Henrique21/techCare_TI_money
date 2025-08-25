@@ -15,7 +15,7 @@ configure_azure_monitor()
 
 app = func.FunctionApp()
 
-@app.schedule(schedule="0 20 4 * * *", arg_name="myTimer", run_on_startup=True,
+@app.schedule(schedule="0 50 4 * * *", arg_name="myTimer", run_on_startup=True,
               use_monitor=False) 
 def run_pipeline(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.datetime.utcnow().replace(

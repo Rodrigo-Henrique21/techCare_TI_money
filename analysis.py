@@ -2,45 +2,32 @@ import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import shutil
-from upload_blob import download_directory, upload_directory
+import logging
+from azure_storage import AzureStorageManager
 
 
 class IntegradorDados:
-    def __init__(self, silver_path, gold_path):
-        self.silver_path = silver_path
-        self.gold_path = gold_path
-        os.makedirs(self.gold_path, exist_ok=True)
+    def __init__(self):
+        self.storage_manager = AzureStorageManager()
         
     def carregar_dados(self):
-        """Carrega todos os dados da pasta silver"""
+        """Carrega todos os dados da camada silver do blob storage"""
         self.dados = {}
-        
-        # Carrega dados B3
         print("Carregando dados B3...")
-        for arquivo in os.listdir(self.silver_path):
-            if arquivo.startswith('b3_') and arquivo.endswith('.parquet'):
-                ticker = arquivo.split('_')[1].split('.')[0]
-                self.dados[f'b3_{ticker}'] = pd.read_parquet(os.path.join(self.silver_path, arquivo))
-        
-        # Carrega dados do Tesouro
+        b3_blobs = self.storage_manager.list_blobs(prefix='silver/b3_')
+        for blob in b3_blobs:
+            nome = os.path.basename(blob).replace('.parquet', '')
+            self.dados[nome] = self.storage_manager.read_dataframe('silver', nome)
         print("Carregando dados do Tesouro...")
-        self.dados['tesouro_rentabilidade'] = pd.read_parquet(os.path.join(self.silver_path, 'tesouro_rentabilidade.parquet'))
-        
-        # Carrega dados de custos do Tesouro
-        for arquivo in os.listdir(self.silver_path):
-            if arquivo.startswith('tesouro_custos_') and arquivo.endswith('.parquet'):
-                nome = arquivo.replace('.parquet', '')
-                self.dados[nome] = pd.read_parquet(os.path.join(self.silver_path, arquivo))
-        
-        # Carrega IPCA
+        self.dados['tesouro_rentabilidade'] = self.storage_manager.read_dataframe('silver', 'tesouro_rentabilidade')
+        custos_blobs = self.storage_manager.list_blobs(prefix='silver/tesouro_custos_')
+        for blob in custos_blobs:
+            nome = os.path.basename(blob).replace('.parquet', '')
+            self.dados[nome] = self.storage_manager.read_dataframe('silver', nome)
         print("Carregando IPCA...")
-        self.dados['ipca'] = pd.read_parquet(os.path.join(self.silver_path, 'ibge_ipca.parquet'))
-        
-        # Carrega dados CVM
+        self.dados['ipca'] = self.storage_manager.read_dataframe('silver', 'ibge_ipca')
         print("Carregando dados CVM...")
-        self.dados['fundos'] = pd.read_parquet(os.path.join(self.silver_path, 'cvm_fundos.parquet'))
-        
+        self.dados['fundos'] = self.storage_manager.read_dataframe('silver', 'cvm_fundos')
         return self.dados
     
     def analise_b3_ipca(self):
@@ -93,9 +80,8 @@ class IntegradorDados:
         # Salva resultados na gold
         if resultados:
             df_resultados = pd.DataFrame(resultados)
-            gold_path = os.path.join(self.gold_path, 'analise_b3_ipca.parquet')
-            df_resultados.to_parquet(gold_path, index=False)
-            print(f"\nResultados salvos em: {gold_path}")
+            self.storage_manager.save_dataframe(df_resultados, 'gold', 'analise_b3_ipca')
+            print("\nResultados salvos no blob storage: gold/analise_b3_ipca.parquet")
     
     def analise_fundos_tesouro(self):
         """Análise dos fundos que investem em títulos públicos"""
@@ -134,16 +120,11 @@ class IntegradorDados:
         # Salva resultados na gold
         df_fundos = pd.DataFrame([resultados_fundos])
         df_tesouro = pd.DataFrame([resultados_tesouro])
-        
-        gold_path_fundos = os.path.join(self.gold_path, 'analise_fundos.parquet')
-        gold_path_tesouro = os.path.join(self.gold_path, 'analise_tesouro.parquet')
-        
-        df_fundos.to_parquet(gold_path_fundos, index=False)
-        df_tesouro.to_parquet(gold_path_tesouro, index=False)
-        
-        print(f"\nResultados salvos em:")
-        print(f"- {gold_path_fundos}")
-        print(f"- {gold_path_tesouro}")
+        self.storage_manager.save_dataframe(df_fundos, 'gold', 'analise_fundos')
+        self.storage_manager.save_dataframe(df_tesouro, 'gold', 'analise_tesouro')
+        print("\nResultados salvos no blob storage:")
+        print("- gold/analise_fundos.parquet")
+        print("- gold/analise_tesouro.parquet")
     
     def analise_custos_tesouro(self):
         """Análise dos custos do Tesouro"""
@@ -188,9 +169,8 @@ class IntegradorDados:
         # Salva resultados na gold
         if resultados_custos:
             df_resultados = pd.DataFrame(resultados_custos)
-            gold_path = os.path.join(self.gold_path, 'analise_custos_tesouro.parquet')
-            df_resultados.to_parquet(gold_path, index=False)
-            print(f"\nResultados salvos em: {gold_path}")
+            self.storage_manager.save_dataframe(df_resultados, 'gold', 'analise_custos_tesouro')
+            print("\nResultados salvos no blob storage: gold/analise_custos_tesouro.parquet")
     
     def executar_analises(self):
         """Executa todas as análises"""
@@ -200,17 +180,6 @@ class IntegradorDados:
         self.analise_custos_tesouro()
 
 if __name__ == "__main__":
-    SILVER_PATH = os.path.join(os.path.dirname(__file__), 'datalake', 'silver')
-    GOLD_PATH = os.path.join(os.path.dirname(__file__), 'datalake', 'gold')
-    
-    integrador = IntegradorDados(SILVER_PATH, GOLD_PATH)
+    integrador = IntegradorDados()
     integrador.executar_analises()
-    print("\nTodas as análises foram concluídas e salvas na camada gold!")
-
-    download_directory("silver/", SILVER_PATH)
-    integrador = IntegradorDados(SILVER_PATH, GOLD_PATH)
-    integrador.executar_analises()
-    upload_directory(GOLD_PATH, "gold/")
-    shutil.rmtree(SILVER_PATH, ignore_errors=True)
-    shutil.rmtree(GOLD_PATH, ignore_errors=True)
     print("\nTodas as análises foram concluídas e salvas na camada gold!")

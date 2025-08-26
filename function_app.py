@@ -6,16 +6,27 @@ from extracao import PipelineExtracao
 from transform import PipelineTransformacao
 import os
 from azure.monitor.opentelemetry import configure_azure_monitor
+from opencensus.ext.azure.log_exporter import AzureLogHandler
 
 # Configuração avançada de logger
 logger = logging.getLogger("techcare.pipeline")
 logger.setLevel(logging.INFO)
-configure_azure_monitor()
+
+# Configurar Application Insights
+connection_string = os.environ.get('APPLICATIONINSIGHTS_CONNECTION_STRING')
+if connection_string:
+    logger.info("Configurando Application Insights com connection string")
+    configure_azure_monitor()
+    handler = AzureLogHandler(connection_string=connection_string)
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+else:
+    logger.warning("APPLICATIONINSIGHTS_CONNECTION_STRING não encontrada nas variáveis de ambiente")
 
 
 app = func.FunctionApp()
 
-@app.schedule(schedule="0 58 4 * * *", arg_name="myTimer", run_on_startup=True,
+@app.schedule(schedule="0 12 2 * * *", arg_name="myTimer", run_on_startup=True,
               use_monitor=False) 
 def run_pipeline(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.datetime.utcnow().replace(

@@ -8,9 +8,14 @@ import os
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
-# Configuração avançada de logger
+# Configuração básica do logger
 logger = logging.getLogger("techcare.pipeline")
 logger.setLevel(logging.INFO)
+
+# Handler padrão para console
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
 
 # Configurar Application Insights
 connection_string = os.environ.get('APPLICATIONINSIGHTS_CONNECTION_STRING')
@@ -26,7 +31,7 @@ else:
 
 app = func.FunctionApp()
 
-@app.schedule(schedule="0 12 2 * * *", arg_name="myTimer", run_on_startup=True,
+@app.schedule(schedule="0 22 2 * * *", arg_name="myTimer", run_on_startup=True,
               use_monitor=False) 
 def run_pipeline(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.datetime.utcnow().replace(

@@ -31,8 +31,8 @@ else:
 
 app = func.FunctionApp()
 
-@app.schedule(schedule="0 25 2 * * *", arg_name="myTimer", run_on_startup=True,
-              use_monitor=False) 
+@app.schedule(schedule="0 35 2 * * *", arg_name="myTimer", run_on_startup=True,
+              use_monitor=True) 
 def run_pipeline(myTimer: func.TimerRequest) -> None:
     utc_timestamp = datetime.datetime.utcnow().replace(
         tzinfo=datetime.timezone.utc).isoformat()

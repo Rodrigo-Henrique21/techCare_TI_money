@@ -27,6 +27,9 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             continue
         historico = historico.reset_index()
         historico["ticker"] = ticker.upper()
+        historico = historico.rename(
+            columns={"Stock Splits": "Stock_Splits"}
+        )
         quadros.append(historico)
     if not quadros:
         return pd.DataFrame(
@@ -38,7 +41,7 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
                 "Close",
                 "Volume",
                 "Dividends",
-                "Stock Splits",
+                "Stock_Splits",
                 "ticker",
             ]
         )
@@ -85,8 +88,8 @@ def _buscar_com_requests(
     return quadro
 
 def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
-    inicio_fmt = format_bacen_date(inicio)
-    fim_fmt = format_bacen_date(fim)
+    inicio_fmt = inicio
+    fim_fmt = fim
     quadros = []
     for nome, codigo in series.items():
         quadro = _buscar_com_requests(codigo, inicio_fmt, fim_fmt)

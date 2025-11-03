@@ -21,12 +21,6 @@ from utilitarios import (
     timestamp_ingestao,
 )
 
-def format_bacen_date(date_str):
-    # If already in DD/MM/YYYY, return as is
-    if "/" in date_str and len(date_str.split("/")[0]) == 2:
-        return date_str
-    # Otherwise, convert from YYYY-MM-DD
-    return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
 
 @dlt.table(
     name=nome_tabela("bronze", "cotacoes_b3"),
@@ -40,9 +34,9 @@ def bronze_cotacoes_b3() -> DataFrame:
         "PETR4,VALE3,ITUB4,BBDC4,BBAS3,ABEV3,WEGE3,MGLU3,ELET3,B3SA3",
     )
         
-    data_inicial = obter_configuracao("b3.start_date", "2015-01-01")
+    data_inicial = obter_configuracao("b3.start_date", "01/01/2020")
     data_final = obter_configuracao(
-        "b3.end_date", datetime.utcnow().strftime("%Y-%m-%d")
+        "b3.end_date", datetime.utcnow().strftime("%d/%m/%Y")
     )
 
     pdf = buscar_historico_b3(tickers, data_inicial, data_final)
@@ -56,13 +50,14 @@ def bronze_cotacoes_b3() -> DataFrame:
             T.StructField("Close", T.DoubleType()),
             T.StructField("Volume", T.DoubleType()),
             T.StructField("Dividends", T.DoubleType()),
-            T.StructField("Stock Splits", T.DoubleType()),
+            T.StructField("Stock_Splits", T.DoubleType()),
             T.StructField("ticker", T.StringType()),
             T.StructField("ingestion_timestamp", T.TimestampType()),
         ]
     )
     if pdf.empty:
         return criar_dataframe_vazio(schema)
+    pdf = pdf.rename(columns={"Stock Splits": "Stock_Splits"})
     return spark.createDataFrame(pdf, schema=schema)
 
 
@@ -90,14 +85,13 @@ def bronze_series_bacen() -> DataFrame:
             ),
         )
     )
-    data_inicial = format_bacen_date(
-        obter_configuracao("bacen.start_date", "2010-01-01")
-    )
-    data_final = format_bacen_date(
-        obter_configuracao("bacen.end_date", datetime.utcnow().strftime("%Y-%m-%d"))
-    )
-    pdf = buscar_series_bacen(series, data_inicial, data_final).reset_index()
+    # Pass dates as YYYY-MM-DD (no conversion)
+    data_inicial = obter_configuracao("bacen.start_date", "01/01/2020")
+    data_final = obter_configuracao("bacen.end_date", datetime.utcnow().strftime("%d/%m/%Y"))
+
+    pdf = buscar_series_bacen(series, data_inicial, data_final).reset_index(drop=True)
     pdf["ingestion_timestamp"] = timestamp_ingestao()
+
     return spark.createDataFrame(pdf)
 
 

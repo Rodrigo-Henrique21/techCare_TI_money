@@ -1,32 +1,39 @@
 """Funções utilitárias compartilhadas pelos notebooks e pipelines DLT."""
 
 from .configuracoes import (
-    CATALOGO_DESTINO,
-    ESQUEMAS_DESTINO,
+    DEFINICAO_TABELAS,
+    ESQUEMAS,
+    PROPRIEDADES_TABELAS,
     TABELAS_BRONZE,
     TABELAS_PRATA,
     TABELAS_OURO,
-    criar_dataframe_vazio,
-    nome_tabela,
     obter_configuracao,
     obter_lista_configuracoes,
-    spark,
+    obter_nome_tabela,
+    obter_metadados_tabela,
     timestamp_ingestao,
 )
-from .fontes_dados import buscar_historico_b3, buscar_series_bacen
+from .fontes_dados import (
+    buscar_historico_b3,
+    buscar_series_bacen,
+    criar_dataframe_vazio,
+    spark,
+)
 
 __all__ = [
-    "CATALOGO_DESTINO",
-    "ESQUEMAS_DESTINO",
+    "DEFINICAO_TABELAS",
+    "ESQUEMAS",
+    "PROPRIEDADES_TABELAS",
     "TABELAS_BRONZE",
     "TABELAS_PRATA",
     "TABELAS_OURO",
-    "criar_dataframe_vazio",
-    "nome_tabela",
     "obter_configuracao",
     "obter_lista_configuracoes",
-    "spark",
+    "obter_nome_tabela",
+    "obter_metadados_tabela",
     "timestamp_ingestao",
     "buscar_historico_b3",
     "buscar_series_bacen",
+    "criar_dataframe_vazio",
+    "spark",
 ]

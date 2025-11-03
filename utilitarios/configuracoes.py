@@ -2,161 +2,220 @@
 
 from __future__ import annotations
 
-import re
+import os
+import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Any, Union
 
-from pyspark.sql import DataFrame, SparkSession, types as T
-
-CATALOGO_PADRAO = "platfunc"
-ESQUEMAS_PADRAO = {
-    "bronze": "aafn_ing",
-    "prata": "aafn_tgt",
-    "ouro": "aafn_ddm",
+# Definição dos esquemas para cada camada
+ESQUEMAS = {
+    "bronze": "aafn_ing",  # Ingestão - Dados brutos
+    "prata": "aafn_tgt",   # Target - Dados normalizados
+    "ouro": "aafn_ddm"     # Data Mart - Dados analíticos
 }
 
-spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
+# Qualidade e propriedades por camada
+PROPRIEDADES_TABELAS = {
+    "bronze": {
+        "quality": "bronze",
+        "pipelines.reset.allowed": "false",
+        "pipelines.trigger.interval": "12 hours",  # Atualização a cada 12 horas
+        "delta.autoOptimize.optimizeWrite": "true",
+        "delta.autoOptimize.autoCompact": "true",
+        "delta.enableChangeDataFeed": "true"
+    },
+    "prata": {
+        "quality": "silver",
+        "pipelines.reset.allowed": "false",
+        "pipelines.trigger.interval": "12 hours",
+        "delta.autoOptimize.optimizeWrite": "true",
+        "delta.autoOptimize.autoCompact": "true",
+        "delta.enableChangeDataFeed": "true"
+    },
+    "ouro": {
+        "quality": "gold",
+        "pipelines.reset.allowed": "false",
+        "pipelines.trigger.interval": "12 hours",
+        "delta.autoOptimize.optimizeWrite": "true",
+        "delta.autoOptimize.autoCompact": "true",
+        "delta.enableChangeDataFeed": "true"
+    }
+}
+
+# Estrutura das tabelas por camada e domínio
+DEFINICAO_TABELAS = {
+    "bronze": {
+        # Dados brutos - Camada de Ingestão (ing)
+        "cotacoes_b3": {
+            "descricao": "Cotações brutas da B3 (Yahoo Finance)",
+            "alias": "Cotações B3",
+            "colunas_esperadas": ["Date", "Open", "High", "Low", "Close", "Volume", "Dividends", "Stock_Splits", "ticker"]
+        },
+        "series_bacen": {
+            "descricao": "Séries temporais do BACEN (SGS)",
+            "alias": "Indicadores BACEN",
+            "colunas_esperadas": ["data", "valor", "serie"]
+        }
+    },
+    "prata": {
+        # Dados normalizados - Camada de Transformação (tgt)
+        "tb_mkt_eqt_day": {
+            "descricao": "Série histórica diária de equity",
+            "alias": "Equity Diário",
+            "fonte": "tb_fin_cot_b3",
+            "colunas_esperadas": ["trade_date", "open_price", "high_price", "low_price", "close_price", "volume", "div_cash", "split_ratio", "symbol"]
+        },
+        "tb_mkt_idx_eco": {
+            "descricao": "Indicadores econômicos padronizados",
+            "alias": "Índices Econômicos",
+            "fonte": "tb_fin_ind_bc",
+            "colunas_esperadas": ["ref_date", "idx_value", "idx_type", "frequency"]
+        }
+    },
+    "ouro": {
+        # Dados analíticos - Camada de Data Mart (ddm)
+        "tb_mkt_eqt_perf": {
+            "descricao": "Análise de performance de equity",
+            "alias": "Performance de Ativos",
+            "fonte": "tb_mkt_eqt_day",
+            "colunas_esperadas": ["symbol", "monthly_return", "volatility", "avg_price", "avg_volume", "last_update"]
+        },
+        "tb_mkt_idx_dash": {
+            "descricao": "Dashboard de indicadores macroeconômicos",
+            "alias": "Dashboard Macro",
+            "fonte": "tb_mkt_idx_eco",
+            "colunas_esperadas": ["idx_type", "current_value", "mtd_change", "ytd_change", "trend_6m", "last_update"]
+        }
+    }
+}
+
+# Cache de configurações para ambiente local
+_config_local: Dict[str, str] = {}
 
 
 def obter_configuracao(chave: str, padrao: Optional[str] = None) -> Optional[str]:
-    """Obtém parâmetros configurados no pipeline, caindo em valores padrão quando ausentes."""
-
-    try:
-        valor = spark.conf.get(chave)
-    except Exception:
-        valor = None
+    """
+    Obtém parâmetros de configuração na seguinte ordem de prioridade:
+    1. Variável de ambiente
+    2. Cache local
+    3. Valor padrão
+    """
+    # Tenta variável de ambiente primeiro (converte chave.nested para CHAVE_NESTED)
+    env_key = chave.replace(".", "_").upper()
+    valor = os.environ.get(env_key)
+    
+    # Se não encontrou na env, tenta no cache local
+    if valor is None:
+        valor = _config_local.get(chave)
+        
+    # Retorna valor encontrado ou padrão
     return valor if valor is not None else padrao
-
 
 def obter_lista_configuracoes(chave: str, padrao: str = "") -> List[str]:
     """Converte valores de configuração separados por vírgula em uma lista sanitizada."""
-
     valor = obter_configuracao(chave, padrao) or ""
     return [item.strip() for item in valor.split(",") if item.strip()]
 
+def definir_configuracao_local(chave: str, valor: str) -> None:
+    """Define uma configuração no cache local (útil para desenvolvimento e testes)."""
+    _config_local[chave] = valor
 
-def _validar_identificador(nome: str, contexto: str) -> str:
-    if not nome:
-        raise ValueError(f"É obrigatório informar um nome para {contexto}.")
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", nome):
-        raise ValueError(f"O nome '{nome}' não é válido para {contexto}.")
-    return nome
-
-
-def _configurar_catalogo_e_esquemas() -> Tuple[str, Dict[str, str]]:
-    """Garante que o catálogo e os esquemas de destino existam e estejam ativos."""
-
-    catalogo_configurado = _validar_identificador(
-        obter_configuracao("catalogo.destino", CATALOGO_PADRAO),
-        "o catálogo de destino",
-    )
-
-    esquemas: Dict[str, str] = {}
-    for camada, padrao in ESQUEMAS_PADRAO.items():
-        chave_config = f"esquema.{camada}"
-        esquema_configurado = _validar_identificador(
-            obter_configuracao(chave_config, padrao),
-            f"o esquema da camada {camada}",
+def obter_nome_tabela(camada: str, nome_base: str, incluir_esquema: bool = True) -> str:
+    """
+    Retorna o nome completo da tabela para a camada especificada.
+    
+    Args:
+        camada: Nome da camada ('bronze', 'prata' ou 'ouro')
+        nome_base: Nome base da tabela
+        incluir_esquema: Se True, retorna o nome completo com esquema (ex: aafn_ing.tabela)
+    
+    Returns:
+        Nome da tabela, opcionalmente prefixado com o esquema
+    """
+    if camada not in DEFINICAO_TABELAS:
+        raise ValueError(f"Camada inválida: {camada}. Use: {list(DEFINICAO_TABELAS.keys())}")
+        
+    if nome_base not in DEFINICAO_TABELAS[camada]:
+        raise ValueError(
+            f"Tabela '{nome_base}' não encontrada na camada {camada}. "
+            f"Tabelas disponíveis: {list(DEFINICAO_TABELAS[camada].keys())}"
         )
-        esquemas[camada] = esquema_configurado
+    
+    nome_tabela = DEFINICAO_TABELAS[camada][nome_base]
+    if incluir_esquema:
+        return f"{ESQUEMAS[camada]}.{nome_tabela}"
+    return nome_tabela
 
-    try:
-        spark.sql(f"USE CATALOG `{catalogo_configurado}`")
-    except Exception as erro:
-        raise RuntimeError(
-            "Não foi possível selecionar o catálogo configurado. "
-            "Garanta que ele exista antes de executar o pipeline DLT."
-        ) from erro
-
-    try:
-        namespaces = {
-            linha[0]
-            for linha in spark.sql(f"SHOW NAMESPACES IN `{catalogo_configurado}`").collect()
-        }
-    except Exception as erro:
-        raise RuntimeError(
-            "Não foi possível listar os esquemas do catálogo configurado. "
-            "Garanta que ele exista e esteja acessível antes de executar o pipeline DLT."
-        ) from erro
-
-    for camada, esquema in esquemas.items():
-        if esquema not in namespaces:
-            raise RuntimeError(
-                "O esquema configurado para a camada "
-                f"{camada} ('{esquema}') não foi encontrado no catálogo "
-                f"'{catalogo_configurado}'. Crie-o previamente antes de executar o pipeline DLT."
-            )
-
-    try:
-        spark.sql(f"USE SCHEMA `{esquemas['bronze']}`")
-    except Exception as erro:
-        raise RuntimeError(
-            "Não foi possível selecionar o esquema da camada bronze mesmo após validar sua existência. "
-            "Verifique as permissões do workspace antes de executar o pipeline DLT."
-        ) from erro
-
-    return catalogo_configurado, esquemas
+def obter_metadados_tabela(camada: str, nome_base: str) -> Dict[str, Any]:
+    """Retorna os metadados de uma tabela específica."""
+    if camada not in DEFINICAO_TABELAS:
+        raise ValueError(f"Camada inválida: {camada}")
+        
+    if nome_base not in DEFINICAO_TABELAS[camada]:
+        raise ValueError(f"Tabela '{nome_base}' não encontrada na camada {camada}")
+        
+    return DEFINICAO_TABELAS[camada][nome_base]
 
 
-CATALOGO_DESTINO, ESQUEMAS_DESTINO = _configurar_catalogo_e_esquemas()
-
-
+# Aliases para compatibilidade com código legado
 TABELAS_BRONZE = {
-    "cotacoes_b3": "cotacoes_b3",
-    "series_bacen": "series_bacen",
+    "cotacoes_b3": "cotacoes_b3",     # Cotações B3
+    "series_bacen": "series_bacen"    # Indicadores BACEN
 }
 
 TABELAS_PRATA = {
-    "cotacoes_b3": "cotacoes_b3",
-    "series_bacen": "series_bacen",
+    "cotacoes_b3": "tb_mkt_eqt_day",     # Equity Diário
+    "series_bacen": "tb_mkt_idx_eco"      # Índices Econômicos
 }
 
 TABELAS_OURO = {
-    "metricas_b3": "metricas_b3",
-    "indicadores_bacen": "indicadores_bacen",
+    "metricas_b3": "tb_mkt_eqt_perf",    # Performance de Ativos
+    "indicadores_bacen": "tb_mkt_idx_dash" # Dashboard Macro
 }
-
-_MAPA_TABELAS = {
-    "bronze": TABELAS_BRONZE,
-    "prata": TABELAS_PRATA,
-    "ouro": TABELAS_OURO,
-}
-
-
-def nome_tabela(camada: str, nome: str) -> str:
-    """Monta o identificador totalmente qualificado de uma tabela DLT."""
-
-    try:
-        alias = _MAPA_TABELAS[camada][nome]
-    except KeyError as erro:
-        raise KeyError(
-            "Informe uma camada válida (bronze, prata ou ouro) e um nome de tabela"
-        ) from erro
-    return f"{CATALOGO_DESTINO}.{ESQUEMAS_DESTINO[camada]}.{alias}"
-
 
 def timestamp_ingestao() -> datetime:
     """Retorna o instante UTC da captura de dados para rastreabilidade."""
-
     return datetime.utcnow()
 
-
-def criar_dataframe_vazio(schema: T.StructType) -> DataFrame:
-    """Cria um DataFrame vazio compatível com o schema fornecido."""
-
+def criar_dataframe_vazio(schema: Any) -> DataFrame:
+    """Cria um DataFrame vazio com o schema especificado."""
     return spark.createDataFrame([], schema)
 
+def buscar_historico_b3(tickers: List[str], data_inicial: str, data_final: str) -> pd.DataFrame:
+    """
+    Busca histórico de cotações na API do Yahoo Finance.
+    Retorna um DataFrame pandas com os dados normalizados.
+    """
+    # TODO: Implementar a lógica de busca na API do Yahoo Finance
+    # Por enquanto retorna um DataFrame vazio para teste
+    return pd.DataFrame(columns=[
+        "Date", "Open", "High", "Low", "Close", 
+        "Volume", "Dividends", "Stock Splits", "ticker"
+    ])
 
+def buscar_series_bacen(series: Dict[str, int], data_inicial: str, data_final: str) -> pd.DataFrame:
+    """
+    Busca séries temporais na API do BACEN.
+    Retorna um DataFrame pandas com os dados normalizados.
+    """
+    # TODO: Implementar a lógica de busca na API do BACEN
+    # Por enquanto retorna um DataFrame vazio para teste
+    return pd.DataFrame(columns=["data", "valor", "serie"])
+
+# Exporta apenas o necessário
 __all__ = [
-    "CATALOGO_DESTINO",
-    "ESQUEMAS_DESTINO",
+    "DEFINICAO_TABELAS",
     "TABELAS_BRONZE",
     "TABELAS_PRATA",
     "TABELAS_OURO",
-    "criar_dataframe_vazio",
-    "nome_tabela",
     "obter_configuracao",
     "obter_lista_configuracoes",
-    "spark",
+    "definir_configuracao_local",
+    "obter_nome_tabela",
+    "obter_metadados_tabela",
     "timestamp_ingestao",
+    "criar_dataframe_vazio",
+    "buscar_historico_b3",
+    "buscar_series_bacen",
+    "spark",
 ]

@@ -6,95 +6,138 @@ import dlt
 from pyspark.sql import DataFrame, functions as F
 from pyspark.sql.window import Window
 
-from utilitarios import nome_tabela,ESQUEMAS_DESTINO, TABELAS_OURO, TABELAS_PRATA
+from utilitarios.configuracoes import (
+    PROPRIEDADES_TABELAS,
+    TABELAS_OURO,
+    TABELAS_PRATA,
+    obter_nome_tabela,
+    obter_metadados_tabela,
+)
 
 
-NOME_PRATA_COTACOES = nome_tabela("prata", "cotacoes_b3")
-NOME_PRATA_SERIES = nome_tabela("prata", "series_bacen")
+NOME_PRATA_COTACOES = obter_nome_tabela("prata", TABELAS_PRATA["cotacoes_b3"])
+NOME_PRATA_SERIES = obter_nome_tabela("prata", TABELAS_PRATA["series_bacen"])
 
 
 @dlt.table(
-    name=TABELAS_OURO["metricas_b3"],
-    comment="Métricas mensais de desempenho das ações acompanhadas na B3.",
+    name=obter_nome_tabela("ouro", TABELAS_OURO["metricas_b3"]),
+    comment=obter_metadados_tabela("ouro", TABELAS_OURO["metricas_b3"])["descricao"],
+    table_properties=PROPRIEDADES_TABELAS["ouro"]
 )
 def ouro_metricas_b3() -> DataFrame:
     cotacoes = dlt.read(NOME_PRATA_COTACOES)
-    janela = Window.partitionBy("ticker").orderBy("date")
-    retornos = cotacoes.withColumn("retorno", F.col("close") / F.lag("close").over(janela) - 1)
-    mensais = retornos.withColumn("ano_mes", F.date_format("date", "yyyy-MM"))
-    mensais = mensais.groupBy("ticker", "ano_mes").agg(
-        F.mean("retorno").alias("retorno_mensal")
+    janela = Window.partitionBy("symbol").orderBy("trade_date")
+    retornos = cotacoes.withColumn("retorno", F.col("close_price") / F.lag("close_price").over(janela) - 1)
+    mensais = retornos.withColumn("ano_mes", F.date_format("trade_date", "yyyy-MM"))
+    mensais = mensais.groupBy("symbol", "ano_mes").agg(
+        F.mean("retorno").alias("monthly_return")
     )
-    metricas = mensais.groupBy("ticker").agg(
-        F.mean("retorno_mensal").alias("retorno_medio"),
-        F.stddev("retorno_mensal").alias("volatilidade"),
+    metricas = mensais.groupBy("symbol").agg(
+        F.mean("monthly_return").alias("avg_return"),
+        F.stddev("monthly_return").alias("volatility"),
     )
-    estatisticas = cotacoes.groupBy("ticker").agg(
-        F.min("date").alias("primeira_data"),
-        F.max("date").alias("ultima_data"),
-        F.count("*").alias("num_pregoes"),
-        F.mean("close").alias("preco_medio"),
-        F.mean("volume").alias("volume_medio"),
+    estatisticas = cotacoes.groupBy("symbol").agg(
+        F.mean("close_price").alias("avg_price"),
+        F.mean("volume").alias("avg_volume"),
+        F.max("trade_date").alias("last_update"),
     )
-    return metricas.join(estatisticas, "ticker", "inner")
+    return metricas.join(estatisticas, "symbol", "inner")
 
 
 @dlt.table(
-    name=TABELAS_OURO["indicadores_bacen"],
-    comment="Resumo diário e mensal dos indicadores econômicos consultados no BACEN.",
+    name=obter_nome_tabela("ouro", TABELAS_OURO["indicadores_bacen"]),
+    comment=obter_metadados_tabela("ouro", TABELAS_OURO["indicadores_bacen"])["descricao"],
+    table_properties=PROPRIEDADES_TABELAS["ouro"]
 )
 def ouro_indicadores_bacen() -> DataFrame:
-    series = dlt.read(nome_tabela("prata", "series_bacen"))
-    janela_recente = Window.partitionBy("serie").orderBy(F.col("data").desc())
-    recentes = (
-        series.withColumn("ordem", F.row_number().over(janela_recente))
-        .filter(F.col("ordem") == 1)
-        .select(
-            F.col("serie"),
-            F.col("data").alias("data_recente"),
-            F.col("valor").alias("valor_recente"),
-        )
-    )
-    mensais = (
-        series.withColumn("ano_mes", F.date_format("data", "yyyy-MM"))
-        .groupBy("serie", "ano_mes")
+    """
+    Processa o histórico mensal dos indicadores econômicos do BACEN.
+    Agrupa os dados por indicador e mês, calculando estatísticas mensais.
+    """
+    series = dlt.read(NOME_PRATA_SERIES)
+    
+    # Agrupa por indicador e mês
+    indicadores_mensais = (
+        series
+        .withColumn("ano", F.year("ref_date"))
+        .withColumn("mes", F.month("ref_date"))
+        .withColumn("ano_mes", F.date_format("ref_date", "yyyy-MM"))
+        .groupBy("idx_type", "ano", "mes", "ano_mes")
         .agg(
-            F.mean("valor").alias("media_mensal"),
-            F.max("valor").alias("maximo_mensal"),
-            F.min("valor").alias("minimo_mensal"),
+            F.avg("idx_value").alias("media_mensal"),
+            F.min("idx_value").alias("minimo_mensal"),
+            F.max("idx_value").alias("maximo_mensal"),
+            F.first("ref_date").alias("primeira_data_mes"),
+            F.last("ref_date").alias("ultima_data_mes"),
+            F.count("*").alias("num_medicoes")
         )
     )
-    ultimo_mes = (
-        mensais.withColumn(
-            "ordem_mes", F.row_number().over(
-                Window.partitionBy("serie").orderBy(F.col("ano_mes").desc())
-            )
+    # Calcula variações mensais (MTD - Month to Date)
+    primeiro_dia_mes = F.trunc(F.current_date(), "MM")
+    mtd = (
+        series
+        .filter(F.col("ref_date") >= primeiro_dia_mes)
+        .groupBy("idx_type")
+        .agg(
+            F.first("idx_value").alias("mtd_first"),
+            F.last("idx_value").alias("mtd_last")
         )
-        .filter(F.col("ordem_mes") == 1)
+        .withColumn("mtd_change", (F.col("mtd_last") / F.col("mtd_first") - 1) * 100)
+    )
+    
+    # Adiciona variação em relação ao mês anterior
+    janela_mes_anterior = Window.partitionBy("idx_type").orderBy("ano", "mes")
+    
+    resultado_final = (
+        indicadores_mensais
+        .withColumn(
+            "media_mes_anterior",
+            F.lag("media_mensal").over(janela_mes_anterior)
+        )
+        .withColumn(
+            "variacao_mes_anterior",
+            F.when(
+                F.col("media_mes_anterior").isNotNull(),
+                (F.col("media_mensal") / F.col("media_mes_anterior") - 1) * 100
+            ).otherwise(None)
+        )
+        .orderBy("idx_type", "ano", "mes")
+    )
+    
+    # Adiciona data da última atualização
+    resultado_final = resultado_final.withColumn(
+        "last_update",
+        F.max("ultima_data_mes").over(Window.partitionBy("idx_type"))
+    )
+    
+    # Analisa tendência dos últimos 6 meses
+    seis_meses_atras = F.add_months(F.current_date(), -6)
+    tendencia = (
+        series
+        .filter(F.col("ref_date") >= seis_meses_atras)
+        .groupBy("idx_type")
+        .agg(F.regr_slope("idx_value", F.unix_timestamp("ref_date")).alias("trend_6m"))
+    )
+    
+    # Integra todas as análises no resultado final
+    return (resultado_final
+        .join(tendencia, "idx_type", "left")
         .select(
-            "serie",
-            F.col("ano_mes").alias("ultimo_mes_disponivel"),
-            F.col("media_mensal").alias("media_ultimo_mes"),
+            "idx_type",
+            "ano",
+            "mes",
+            "ano_mes",
+            "media_mensal",
+            "minimo_mensal",
+            "maximo_mensal",
+            "variacao_mes_anterior",
+            "primeira_data_mes",
+            "ultima_data_mes",
+            "num_medicoes",
+            "last_update",
+            F.coalesce("trend_6m", F.lit(0)).alias("trend_6m")  # Tendência ou 0 se não houver dados suficientes
         )
-    )
-    agregadas = mensais.groupBy("serie").agg(
-        F.avg("media_mensal").alias("media_historica"),
-        F.max("maximo_mensal").alias("maximo_historico"),
-        F.min("minimo_mensal").alias("minimo_historico"),
-    )
-    return (
-        recentes.join(ultimo_mes, "serie", "left")
-        .join(agregadas, "serie", "left")
-        .select(
-            "serie",
-            "data_recente",
-            "valor_recente",
-            "ultimo_mes_disponivel",
-            "media_ultimo_mes",
-            "media_historica",
-            "maximo_historico",
-            "minimo_historico",
-        )
+        .orderBy("idx_type", "ano", "mes")
     )
 
 __all__ = [

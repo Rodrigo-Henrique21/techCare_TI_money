@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
-from datetime import datetime
-
+import json
 import pandas as pd
 import requests
-import yfinance as yf
+from datetime import datetime
+from typing import Dict, Iterable, List, Optional, Any, Union
+from pyspark.sql import DataFrame, SparkSession
+
+# Inicializa a sessão Spark
+spark = (SparkSession.builder
+         .appName("dlt-aafn-api_ing-dados")
+         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+         .getOrCreate())
 
 
 try:  # pragma: no cover - dependência opcional em workspaces Databricks
@@ -16,36 +23,83 @@ except ModuleNotFoundError:  # pragma: no cover - tratamos o fallback manualment
     sgs = None
 
 
-def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.DataFrame:
-    """Baixa o histórico de preços dos tickers configurados no Yahoo Finance."""
+def _converter_data(data: str, formato_entrada: str = "%d/%m/%Y", formato_saida: str = "%Y-%m-%d") -> str:
+    """
+    Converte data entre diferentes formatos.
+    
+    Args:
+        data: String representando a data
+        formato_entrada: Formato da data de entrada (default: DD/MM/YYYY)
+        formato_saida: Formato da data de saída (default: YYYY-MM-DD)
+    
+    Returns:
+        Data convertida no formato de saída
+        
+    Raises:
+        ValueError: Se a data estiver em formato inválido
+    """
+    try:
+        return datetime.strptime(data, formato_entrada).strftime(formato_saida)
+    except ValueError as e:
+        raise ValueError(f"Formato de data inválido. Use {formato_entrada}. Erro: {str(e)}")
 
+def criar_dataframe_vazio(schema: Any) -> DataFrame:
+    """Cria um DataFrame vazio com o schema especificado."""
+    return spark.createDataFrame([], schema)
+
+def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.DataFrame:
+    """
+    Baixa o histórico de preços dos tickers configurados no Yahoo Finance.
+    
+    Args:
+        tickers: Lista de códigos de ações (ex: PETR4.SA)
+        inicio: Data inicial no formato DD/MM/YYYY
+        fim: Data final no formato DD/MM/YYYY
+        
+    Returns:
+        DataFrame com histórico de preços
+        
+    Raises:
+        ValueError: Se as datas estiverem em formato inválido
+    """
+    inicio_fmt = _converter_data(inicio)
+    fim_fmt = _converter_data(fim)
+    
+    colunas = [
+        "Date", "Open", "High", "Low", "Close", 
+        "Volume", "Dividends", "Stock_Splits", "ticker"
+    ]
+    
     quadros: List[pd.DataFrame] = []
+    erros: List[str] = []
+    
+    if not tickers:
+        return pd.DataFrame(columns=colunas)
+    
     for ticker in tickers:
-        ticker_sa = f"{ticker}.SA"
-        historico = yf.Ticker(ticker_sa).history(start=inicio, end=fim)
-        if historico.empty:
+        try:
+            ticker_sa = f"{ticker}.SA"
+            historico = yf.Ticker(ticker_sa).history(start=inicio_fmt, end=fim_fmt)
+            if not historico.empty:
+                historico = historico.reset_index()
+                historico["ticker"] = ticker.upper()
+                quadros.append(historico)
+        except Exception as e:
+            erros.append(f"Erro ao buscar {ticker}: {str(e)}")
             continue
-        historico = historico.reset_index()
-        historico["ticker"] = ticker.upper()
-        historico = historico.rename(
-            columns={"Stock Splits": "Stock_Splits"}
-        )
-        quadros.append(historico)
+    
+    if erros:
+        print("Avisos durante a busca de dados:")
+        for erro in erros:
+            print(f"- {erro}")
+            
     if not quadros:
-        return pd.DataFrame(
-            columns=[
-                "Date",
-                "Open",
-                "High",
-                "Low",
-                "Close",
-                "Volume",
-                "Dividends",
-                "Stock_Splits",
-                "ticker",
-            ]
-        )
-    return pd.concat(quadros, ignore_index=True)
+        return pd.DataFrame(columns=colunas)
+        
+    resultado = pd.concat(quadros, ignore_index=True)
+    if "Stock Splits" in resultado.columns:
+        resultado = resultado.rename(columns={"Stock Splits": "Stock_Splits"})
+    return resultado
 
 
 def _normalizar_dataframe_bacen(nome, quadro):
@@ -88,23 +142,53 @@ def _buscar_com_requests(
     return quadro
 
 def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
-    inicio_fmt = inicio
-    fim_fmt = fim
+    """Busca séries temporais no BACEN."""
+    # Converte datas para o formato esperado pelo BACEN (DD/MM/YYYY)
+    try:
+        inicio_fmt = datetime.strptime(inicio, "%d/%m/%Y").strftime("%d/%m/%Y")
+        fim_fmt = datetime.strptime(fim, "%d/%m/%Y").strftime("%d/%m/%Y")
+    except ValueError as e:
+        raise ValueError(f"Data deve estar no formato DD/MM/YYYY: {str(e)}")
+    
     quadros = []
+    erros = []
+    
     for nome, codigo in series.items():
-        quadro = _buscar_com_requests(codigo, inicio_fmt, fim_fmt)
-        # Ignora respostas de erro
-        if not quadro.empty and "error" in quadro.columns:
+        try:
+            quadro = _buscar_com_requests(codigo, inicio_fmt, fim_fmt)
+            if quadro.empty:
+                erros.append(f"Nenhum dado retornado para {nome} (código {codigo})")
+                continue
+            
+            if "error" in quadro.columns:
+                erros.append(f"Erro na série {nome}: {quadro['error'].iloc[0]}")
+                continue
+                
+            # Converte data e valor para tipos corretos
+            quadro["data"] = pd.to_datetime(quadro["data"], format="%d/%m/%Y")
+            quadro["valor"] = pd.to_numeric(quadro["valor"], errors="coerce")
+            quadro = quadro.dropna()
+            
+            if quadro.empty:
+                erros.append(f"Dados inválidos para série {nome}")
+                continue
+                
+            quadro["serie"] = nome
+            quadros.append(quadro)
+            
+        except Exception as e:
+            erros.append(f"Erro ao buscar {nome}: {str(e)}")
             continue
-        # Normaliza datas e remove inválidas
-        quadro.index = pd.to_datetime(quadro["data"], errors="coerce")
-        quadro = quadro[~quadro.index.isna()]
-        quadro["serie"] = nome
-        quadros.append(quadro)
+    
+    if erros:
+        print("Avisos durante a busca de séries BACEN:")
+        for erro in erros:
+            print(f"- {erro}")
+    
     if not quadros:
-        indice_vazio = pd.DatetimeIndex([], name="data")
-        return pd.DataFrame(columns=["valor", "serie"], index=indice_vazio)
-    return pd.concat(quadros).sort_index()
+        return pd.DataFrame(columns=["data", "valor", "serie"])
+        
+    return pd.concat(quadros, ignore_index=True)
 
 
 __all__ = [

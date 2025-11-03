@@ -8,91 +8,158 @@ from datetime import datetime
 import dlt
 from pyspark.sql import DataFrame, types as T
 
-from utilitarios import (
-    nome_tabela,
-    ESQUEMAS_DESTINO,
+from utilitarios.configuracoes import (
+    PROPRIEDADES_TABELAS,
     TABELAS_BRONZE,
+    obter_configuracao,
+    obter_lista_configuracoes,
+    obter_nome_tabela,
+    obter_metadados_tabela,
+    timestamp_ingestao,
+)
+from utilitarios.fontes_dados import (
     buscar_historico_b3,
     buscar_series_bacen,
     criar_dataframe_vazio,
-    obter_configuracao,
-    obter_lista_configuracoes,
     spark,
-    timestamp_ingestao,
 )
 
 
 @dlt.table(
-    name=nome_tabela("bronze", "cotacoes_b3"),
-    comment="Cotações brutas coletadas do Yahoo Finance para os tickers configurados.",
+    name=obter_nome_tabela("bronze", TABELAS_BRONZE["cotacoes_b3"]),
+    comment=obter_metadados_tabela("bronze", TABELAS_BRONZE["cotacoes_b3"])["descricao"],
+    table_properties=PROPRIEDADES_TABELAS["bronze"]
 )
 def bronze_cotacoes_b3() -> DataFrame:
     """Coleta cotações históricas da B3 na API do Yahoo Finance."""
-
+    
+    # Configurações com valores padrão
     tickers = obter_lista_configuracoes(
         "b3.tickers",
         "PETR4,VALE3,ITUB4,BBDC4,BBAS3,ABEV3,WEGE3,MGLU3,ELET3,B3SA3",
     )
-        
+    
+    # Datas no formato correto (DD/MM/YYYY)
     data_inicial = obter_configuracao("b3.start_date", "01/01/2020")
     data_final = obter_configuracao(
-        "b3.end_date", datetime.utcnow().strftime("%d/%m/%Y")
+        "b3.end_date", 
+        datetime.utcnow().strftime("%d/%m/%Y")
     )
 
-    pdf = buscar_historico_b3(tickers, data_inicial, data_final)
-    pdf["ingestion_timestamp"] = timestamp_ingestao()
-    schema = T.StructType(
-        [
-            T.StructField("Date", T.TimestampType()),
-            T.StructField("Open", T.DoubleType()),
-            T.StructField("High", T.DoubleType()),
-            T.StructField("Low", T.DoubleType()),
-            T.StructField("Close", T.DoubleType()),
-            T.StructField("Volume", T.DoubleType()),
-            T.StructField("Dividends", T.DoubleType()),
-            T.StructField("Stock_Splits", T.DoubleType()),
-            T.StructField("ticker", T.StringType()),
-            T.StructField("ingestion_timestamp", T.TimestampType()),
-        ]
-    )
-    if pdf.empty:
+    # Schema esperado para validação
+    schema = T.StructType([
+        T.StructField("Date", T.TimestampType(), False),
+        T.StructField("Open", T.DoubleType(), True),
+        T.StructField("High", T.DoubleType(), True),
+        T.StructField("Low", T.DoubleType(), True),
+        T.StructField("Close", T.DoubleType(), True),
+        T.StructField("Volume", T.DoubleType(), True),
+        T.StructField("Dividends", T.DoubleType(), True),
+        T.StructField("Stock_Splits", T.DoubleType(), True),
+        T.StructField("ticker", T.StringType(), False),
+        T.StructField("ingestion_timestamp", T.TimestampType(), False),
+    ])
+
+    try:
+        # Busca dados da API
+        pdf = buscar_historico_b3(tickers, data_inicial, data_final)
+        
+        if pdf.empty:
+            print(f"Nenhum dado encontrado para os tickers: {tickers}")
+            return criar_dataframe_vazio(schema)
+            
+        # Validação básica dos dados recebidos
+        colunas_esperadas = set(schema.fieldNames())
+        colunas_recebidas = set(pdf.columns)
+        if not colunas_esperadas.issubset(colunas_recebidas):
+            faltantes = colunas_esperadas - colunas_recebidas
+            raise ValueError(f"Colunas ausentes nos dados: {faltantes}")
+            
+        # Adiciona timestamp de ingestão
+        pdf["ingestion_timestamp"] = timestamp_ingestao()
+        
+        # Garante tipos corretos e nomes de colunas padronizados
+        pdf = pdf.rename(columns={"Stock Splits": "Stock_Splits"})
+        
+        # Converte para DataFrame Spark com schema validado
+        df = spark.createDataFrame(pdf, schema=schema)
+        
+        # Otimiza particionamento e ordenação
+        return (df
+                .repartition("ticker")
+                .sortWithinPartitions("Date")
+        )
+        
+    except ValueError as e:
+        print(f"Erro de validação nos dados B3: {str(e)}")
         return criar_dataframe_vazio(schema)
-    pdf = pdf.rename(columns={"Stock Splits": "Stock_Splits"})
-    return spark.createDataFrame(pdf, schema=schema)
+    except Exception as e:
+        print(f"Erro inesperado ao processar cotações B3: {str(e)}")
+        return criar_dataframe_vazio(schema)
 
 
 @dlt.table(
-    name=nome_tabela("bronze", "series_bacen"),
-    comment="Indicadores macroeconômicos brutos consultados no serviço SGS do BACEN.",
+    name=obter_nome_tabela("bronze", TABELAS_BRONZE["series_bacen"]),
+    comment=obter_metadados_tabela("bronze", TABELAS_BRONZE["series_bacen"])["descricao"],
+    table_properties=PROPRIEDADES_TABELAS["bronze"]
 )
 def bronze_series_bacen() -> DataFrame:
     """Busca séries temporais no serviço SGS do BACEN."""
 
+    # Séries econômicas a serem capturadas
+    series_padrao = {
+        "selic": 1178,      # Taxa Selic diária
+        "cdi": 12,          # CDI diário
+        "ipca": 433,        # IPCA mensal
+        "poupanca": 195,    # Rendimento poupança mensal
+        "igpm": 189,        # IGP-M mensal
+        "inpc": 188,        # INPC mensal
+        "igpdi": 190,       # IGP-DI mensal
+        "selic_meta": 432,  # Meta Selic definida pelo COPOM
+    }
+    
+    # Obtém configuração ou usa padrão
     series = json.loads(
         obter_configuracao(
             "bacen.series",
-            json.dumps(
-                {
-                    "selic": 1178,
-                    "cdi": 12,
-                    "ipca": 433,
-                    "poupanca": 195,
-                    "igpm": 189,
-                    "inpc": 188,
-                    "igpdi": 190,
-                    "selic_meta": 432,
-                }
-            ),
+            json.dumps(series_padrao)
         )
     )
-    # Pass dates as YYYY-MM-DD (no conversion)
+    
+    # Datas no formato correto (DD/MM/YYYY)
     data_inicial = obter_configuracao("bacen.start_date", "01/01/2020")
-    data_final = obter_configuracao("bacen.end_date", datetime.utcnow().strftime("%d/%m/%Y"))
+    data_final = obter_configuracao(
+        "bacen.end_date", 
+        datetime.utcnow().strftime("%d/%m/%Y")
+    )
 
-    pdf = buscar_series_bacen(series, data_inicial, data_final).reset_index(drop=True)
-    pdf["ingestion_timestamp"] = timestamp_ingestao()
+    # Schema esperado
+    schema = T.StructType([
+        T.StructField("data", T.TimestampType(), False),
+        T.StructField("valor", T.DoubleType(), False),
+        T.StructField("serie", T.StringType(), False),
+        T.StructField("ingestion_timestamp", T.TimestampType(), False),
+    ])
 
-    return spark.createDataFrame(pdf)
+    try:
+        # Busca dados da API
+        pdf = buscar_series_bacen(series, data_inicial, data_final)
+        
+        if pdf.empty:
+            return criar_dataframe_vazio(schema)
+            
+        # Adiciona timestamp de ingestão
+        pdf["ingestion_timestamp"] = timestamp_ingestao()
+        
+        # Converte para DataFrame Spark com schema validado
+        df = spark.createDataFrame(pdf, schema=schema)
+        
+        # Otimiza particionamento
+        return df.repartition("serie")
+        
+    except Exception as e:
+        print(f"Erro ao processar séries BACEN: {str(e)}")
+        return criar_dataframe_vazio(schema)
 
 
 __all__ = [

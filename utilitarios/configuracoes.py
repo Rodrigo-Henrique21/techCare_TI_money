@@ -126,22 +126,33 @@ def obter_nome_tabela(camada: str, nome_base: str, incluir_esquema: bool = True)
     
     Args:
         camada: Nome da camada ('bronze', 'prata' ou 'ouro')
-        nome_base: Nome base da tabela
+        nome_base: Nome da tabela de referência
         incluir_esquema: Se True, retorna o nome completo com esquema (ex: aafn_ing.tabela)
     
     Returns:
         Nome da tabela, opcionalmente prefixado com o esquema
     """
-    if camada not in DEFINICAO_TABELAS:
-        raise ValueError(f"Camada inválida: {camada}. Use: {list(DEFINICAO_TABELAS.keys())}")
-        
-    if nome_base not in DEFINICAO_TABELAS[camada]:
+    # Seleciona o mapeamento correto baseado na camada
+    if camada == "bronze":
+        mapeamento = TABELAS_BRONZE
+    elif camada == "prata":
+        mapeamento = TABELAS_PRATA
+    elif camada == "ouro":
+        mapeamento = TABELAS_OURO
+    else:
+        raise ValueError(f"Camada inválida: {camada}. Use: bronze, prata ou ouro")
+    
+    # Verifica se a tabela existe no mapeamento
+    if nome_base not in mapeamento:
         raise ValueError(
             f"Tabela '{nome_base}' não encontrada na camada {camada}. "
-            f"Tabelas disponíveis: {list(DEFINICAO_TABELAS[camada].keys())}"
+            f"Tabelas disponíveis: {list(mapeamento.keys())}"
         )
     
-    nome_tabela = DEFINICAO_TABELAS[camada][nome_base]
+    # Obtém o nome real da tabela do mapeamento
+    nome_tabela = mapeamento[nome_base]
+    
+    # Retorna com ou sem esquema
     if incluir_esquema:
         return f"{ESQUEMAS[camada]}.{nome_tabela}"
     return nome_tabela
@@ -177,34 +188,11 @@ def timestamp_ingestao() -> datetime:
     """Retorna o instante UTC da captura de dados para rastreabilidade."""
     return datetime.utcnow()
 
-def criar_dataframe_vazio(schema: Any) -> DataFrame:
-    """Cria um DataFrame vazio com o schema especificado."""
-    return spark.createDataFrame([], schema)
-
-def buscar_historico_b3(tickers: List[str], data_inicial: str, data_final: str) -> pd.DataFrame:
-    """
-    Busca histórico de cotações na API do Yahoo Finance.
-    Retorna um DataFrame pandas com os dados normalizados.
-    """
-    # TODO: Implementar a lógica de busca na API do Yahoo Finance
-    # Por enquanto retorna um DataFrame vazio para teste
-    return pd.DataFrame(columns=[
-        "Date", "Open", "High", "Low", "Close", 
-        "Volume", "Dividends", "Stock Splits", "ticker"
-    ])
-
-def buscar_series_bacen(series: Dict[str, int], data_inicial: str, data_final: str) -> pd.DataFrame:
-    """
-    Busca séries temporais na API do BACEN.
-    Retorna um DataFrame pandas com os dados normalizados.
-    """
-    # TODO: Implementar a lógica de busca na API do BACEN
-    # Por enquanto retorna um DataFrame vazio para teste
-    return pd.DataFrame(columns=["data", "valor", "serie"])
-
 # Exporta apenas o necessário
 __all__ = [
     "DEFINICAO_TABELAS",
+    "ESQUEMAS",
+    "PROPRIEDADES_TABELAS",
     "TABELAS_BRONZE",
     "TABELAS_PRATA",
     "TABELAS_OURO",
@@ -214,8 +202,4 @@ __all__ = [
     "obter_nome_tabela",
     "obter_metadados_tabela",
     "timestamp_ingestao",
-    "criar_dataframe_vazio",
-    "buscar_historico_b3",
-    "buscar_series_bacen",
-    "spark",
 ]

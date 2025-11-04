@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import pandas as pd
 import requests
+import yfinance as yf
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Any, Union
 from pyspark.sql import DataFrame, SparkSession
@@ -62,8 +63,10 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     Raises:
         ValueError: Se as datas estiverem em formato inválido
     """
+    print(f"Iniciando busca de dados para {len(list(tickers))} tickers")
     inicio_fmt = _converter_data(inicio)
     fim_fmt = _converter_data(fim)
+    print(f"Período: {inicio_fmt} até {fim_fmt}")
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 
@@ -74,31 +77,45 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     erros: List[str] = []
     
     if not tickers:
+        print("Nenhum ticker fornecido!")
         return pd.DataFrame(columns=colunas)
     
     for ticker in tickers:
         try:
+            print(f"Buscando dados para {ticker}...")
             ticker_sa = f"{ticker}.SA"
             historico = yf.Ticker(ticker_sa).history(start=inicio_fmt, end=fim_fmt)
-            if not historico.empty:
-                historico = historico.reset_index()
-                historico["ticker"] = ticker.upper()
-                quadros.append(historico)
+            
+            if historico.empty:
+                print(f"Nenhum dado encontrado para {ticker}")
+                continue
+                
+            print(f"Encontrados {len(historico)} registros para {ticker}")
+            historico = historico.reset_index()
+            historico["ticker"] = ticker.upper()
+            quadros.append(historico)
+            
         except Exception as e:
-            erros.append(f"Erro ao buscar {ticker}: {str(e)}")
+            erro_msg = f"Erro ao buscar {ticker}: {str(e)}"
+            print(erro_msg)
+            erros.append(erro_msg)
             continue
     
     if erros:
-        print("Avisos durante a busca de dados:")
+        print("\nAvisos durante a busca de dados:")
         for erro in erros:
             print(f"- {erro}")
             
     if not quadros:
+        print("Nenhum dado encontrado para nenhum ticker!")
         return pd.DataFrame(columns=colunas)
-        
+    
+    print("\nConcatenando resultados...")    
     resultado = pd.concat(quadros, ignore_index=True)
     if "Stock Splits" in resultado.columns:
         resultado = resultado.rename(columns={"Stock Splits": "Stock_Splits"})
+    
+    print(f"Total de registros obtidos: {len(resultado)}")
     return resultado
 
 

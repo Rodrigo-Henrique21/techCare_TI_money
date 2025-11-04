@@ -49,11 +49,13 @@ DEFINICAO_TABELAS = {
         "cotacoes_b3": {
             "descricao": "Cotações brutas da B3 (Yahoo Finance)",
             "alias": "Cotações B3",
+            "nome_fisico": "cotacoes_b3",
             "colunas_esperadas": ["Date", "Open", "High", "Low", "Close", "Volume", "Dividends", "Stock_Splits", "ticker"]
         },
         "series_bacen": {
             "descricao": "Séries temporais do BACEN (SGS)",
             "alias": "Indicadores BACEN",
+            "nome_fisico": "series_bacen",
             "colunas_esperadas": ["data", "valor", "serie"]
         }
     },
@@ -62,13 +64,15 @@ DEFINICAO_TABELAS = {
         "tb_mkt_eqt_day": {
             "descricao": "Série histórica diária de equity",
             "alias": "Equity Diário",
-            "fonte": "tb_fin_cot_b3",
+            "nome_fisico": "tb_mkt_eqt_day",
+            "fonte": "cotacoes_b3",
             "colunas_esperadas": ["trade_date", "open_price", "high_price", "low_price", "close_price", "volume", "div_cash", "split_ratio", "symbol"]
         },
         "tb_mkt_idx_eco": {
             "descricao": "Indicadores econômicos padronizados",
             "alias": "Índices Econômicos",
-            "fonte": "tb_fin_ind_bc",
+            "nome_fisico": "tb_mkt_idx_eco",
+            "fonte": "series_bacen",
             "colunas_esperadas": ["ref_date", "idx_value", "idx_type", "frequency"]
         }
     },
@@ -77,12 +81,14 @@ DEFINICAO_TABELAS = {
         "tb_mkt_eqt_perf": {
             "descricao": "Análise de performance de equity",
             "alias": "Performance de Ativos",
+            "nome_fisico": "tb_mkt_eqt_perf",
             "fonte": "tb_mkt_eqt_day",
             "colunas_esperadas": ["symbol", "monthly_return", "volatility", "avg_price", "avg_volume", "last_update"]
         },
         "tb_mkt_idx_dash": {
             "descricao": "Dashboard de indicadores macroeconômicos",
             "alias": "Dashboard Macro",
+            "nome_fisico": "tb_mkt_idx_dash",
             "fonte": "tb_mkt_idx_eco",
             "colunas_esperadas": ["idx_type", "current_value", "mtd_change", "ytd_change", "trend_6m", "last_update"]
         }
@@ -126,7 +132,7 @@ def obter_nome_tabela(camada: str, nome_base: str, incluir_esquema: bool = True)
     
     Args:
         camada: Nome da camada ('bronze', 'prata' ou 'ouro')
-        nome_base: Nome da tabela
+        nome_base: Nome da tabela ou sua chave em DEFINICAO_TABELAS
         incluir_esquema: Se True, retorna o nome completo com esquema (ex: aafn_ing.tabela)
     
     Returns:
@@ -135,16 +141,26 @@ def obter_nome_tabela(camada: str, nome_base: str, incluir_esquema: bool = True)
     if camada not in ESQUEMAS:
         raise ValueError(f"Camada inválida: {camada}. Use: bronze, prata ou ouro")
     
-    if nome_base not in DEFINICAO_TABELAS[camada]:
-        raise ValueError(
-            f"Tabela '{nome_base}' não encontrada na camada {camada}. "
-            f"Tabelas disponíveis: {list(DEFINICAO_TABELAS[camada].keys())}"
-        )
+    # Primeiro tenta encontrar a tabela diretamente em DEFINICAO_TABELAS
+    camada_def = DEFINICAO_TABELAS[camada]
+    if nome_base in camada_def:
+        nome_tabela = nome_base
+    else:
+        # Se não encontrou, procura em todas as chaves por um valor correspondente
+        tabelas_encontradas = [(chave, meta) for chave, meta in camada_def.items() 
+                             if meta.get("nome_fisico", chave) == nome_base]
+        
+        if not tabelas_encontradas:
+            raise ValueError(
+                f"Tabela '{nome_base}' não encontrada na camada {camada}. "
+                f"Tabelas disponíveis: {list(camada_def.keys())}"
+            )
+        nome_tabela = tabelas_encontradas[0][0]
     
     # Retorna com ou sem esquema
     if incluir_esquema:
-        return f"{ESQUEMAS[camada]}.{nome_base}"
-    return nome_base
+        return f"{ESQUEMAS[camada]}.{nome_tabela}"
+    return nome_tabela
 
 def obter_metadados_tabela(camada: str, nome_base: str) -> Dict[str, Any]:
     """Retorna os metadados de uma tabela específica."""

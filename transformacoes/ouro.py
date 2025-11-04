@@ -8,20 +8,18 @@ from pyspark.sql.window import Window
 
 from utilitarios.configuracoes import (
     PROPRIEDADES_TABELAS,
-    TABELAS_OURO,
-    TABELAS_PRATA,
     obter_nome_tabela,
     obter_metadados_tabela,
 )
 
 
-NOME_PRATA_COTACOES = obter_nome_tabela("prata", TABELAS_PRATA["cotacoes_b3"])
-NOME_PRATA_SERIES = obter_nome_tabela("prata", TABELAS_PRATA["series_bacen"])
+NOME_PRATA_COTACOES = obter_nome_tabela("prata", "tb_mkt_eqt_day")
+NOME_PRATA_SERIES = obter_nome_tabela("prata", "tb_mkt_idx_eco")
 
 
 @dlt.table(
-    name=obter_nome_tabela("ouro", TABELAS_OURO["metricas_b3"]),
-    comment=obter_metadados_tabela("ouro", TABELAS_OURO["metricas_b3"])["descricao"],
+    name=obter_nome_tabela("ouro", "tb_mkt_eqt_perf"),
+    comment=obter_metadados_tabela("ouro", "tb_mkt_eqt_perf")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["ouro"]
 )
 def ouro_metricas_b3() -> DataFrame:
@@ -45,8 +43,8 @@ def ouro_metricas_b3() -> DataFrame:
 
 
 @dlt.table(
-    name=obter_nome_tabela("ouro", TABELAS_OURO["indicadores_bacen"]),
-    comment=obter_metadados_tabela("ouro", TABELAS_OURO["indicadores_bacen"])["descricao"],
+    name=obter_nome_tabela("ouro", "tb_mkt_idx_dash"),
+    comment=obter_metadados_tabela("ouro", "tb_mkt_idx_dash")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["ouro"]
 )
 def ouro_indicadores_bacen() -> DataFrame:

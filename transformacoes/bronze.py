@@ -10,7 +10,6 @@ from pyspark.sql import DataFrame, types as T
 
 from utilitarios.configuracoes import (
     PROPRIEDADES_TABELAS,
-    TABELAS_BRONZE,
     obter_configuracao,
     obter_lista_configuracoes,
     obter_nome_tabela,
@@ -26,8 +25,8 @@ from utilitarios.fontes_dados import (
 
 
 @dlt.table(
-    name=obter_nome_tabela("bronze", TABELAS_BRONZE["cotacoes_b3"]),
-    comment=obter_metadados_tabela("bronze", TABELAS_BRONZE["cotacoes_b3"])["descricao"],
+    name=obter_nome_tabela("bronze", "cotacoes_b3"),
+    comment=obter_metadados_tabela("bronze", "cotacoes_b3")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["bronze"]
 )
 def bronze_cotacoes_b3() -> DataFrame:
@@ -99,8 +98,8 @@ def bronze_cotacoes_b3() -> DataFrame:
 
 
 @dlt.table(
-    name=obter_nome_tabela("bronze", TABELAS_BRONZE["series_bacen"]),
-    comment=obter_metadados_tabela("bronze", TABELAS_BRONZE["series_bacen"])["descricao"],
+    name=obter_nome_tabela("bronze", "series_bacen"),
+    comment=obter_metadados_tabela("bronze", "series_bacen")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["bronze"]
 )
 def bronze_series_bacen() -> DataFrame:

@@ -7,18 +7,16 @@ from pyspark.sql import DataFrame, functions as F
 
 from utilitarios.configuracoes import (
     PROPRIEDADES_TABELAS,
-    TABELAS_BRONZE,
-    TABELAS_PRATA,
     obter_nome_tabela,
     obter_metadados_tabela,
 )
 
 
-NOME_BRONZE_COTACOES = obter_nome_tabela("bronze", TABELAS_BRONZE["cotacoes_b3"])
-NOME_BRONZE_BACEN = obter_nome_tabela("bronze", TABELAS_BRONZE["series_bacen"])
+NOME_BRONZE_COTACOES = obter_nome_tabela("bronze", "cotacoes_b3")
+NOME_BRONZE_BACEN = obter_nome_tabela("bronze", "series_bacen")
 
-NOME_PRATA_COTACOES = obter_nome_tabela("prata", TABELAS_PRATA["cotacoes_b3"])
-NOME_PRATA_BACEN = obter_nome_tabela("prata", TABELAS_PRATA["series_bacen"])
+NOME_PRATA_COTACOES = obter_nome_tabela("prata", "tb_mkt_eqt_day")
+NOME_PRATA_BACEN = obter_nome_tabela("prata", "tb_mkt_idx_eco")
 
 
 def normalizar_colunas(df: DataFrame) -> DataFrame:
@@ -28,8 +26,8 @@ def normalizar_colunas(df: DataFrame) -> DataFrame:
 
 
 @dlt.table(
-    name=obter_nome_tabela("prata", TABELAS_PRATA["cotacoes_b3"]),
-    comment=obter_metadados_tabela("prata", TABELAS_PRATA["cotacoes_b3"])["descricao"],
+    name=obter_nome_tabela("prata", "tb_mkt_eqt_day"),
+    comment=obter_metadados_tabela("prata", "tb_mkt_eqt_day")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["prata"]
 )
 @dlt.expect_all({
@@ -56,8 +54,8 @@ def prata_cotacoes_b3() -> DataFrame:
 
 
 @dlt.table(
-    name=obter_nome_tabela("prata", TABELAS_PRATA["series_bacen"]),
-    comment=obter_metadados_tabela("prata", TABELAS_PRATA["series_bacen"])["descricao"],
+    name=obter_nome_tabela("prata", "tb_mkt_idx_eco"),
+    comment=obter_metadados_tabela("prata", "tb_mkt_idx_eco")["descricao"],
     table_properties=PROPRIEDADES_TABELAS["prata"]
 )
 def prata_series_bacen() -> DataFrame:

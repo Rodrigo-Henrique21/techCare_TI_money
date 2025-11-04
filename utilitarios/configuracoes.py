@@ -126,36 +126,25 @@ def obter_nome_tabela(camada: str, nome_base: str, incluir_esquema: bool = True)
     
     Args:
         camada: Nome da camada ('bronze', 'prata' ou 'ouro')
-        nome_base: Nome da tabela de referência
+        nome_base: Nome da tabela
         incluir_esquema: Se True, retorna o nome completo com esquema (ex: aafn_ing.tabela)
     
     Returns:
         Nome da tabela, opcionalmente prefixado com o esquema
     """
-    # Seleciona o mapeamento correto baseado na camada
-    if camada == "bronze":
-        mapeamento = TABELAS_BRONZE
-    elif camada == "prata":
-        mapeamento = TABELAS_PRATA
-    elif camada == "ouro":
-        mapeamento = TABELAS_OURO
-    else:
+    if camada not in ESQUEMAS:
         raise ValueError(f"Camada inválida: {camada}. Use: bronze, prata ou ouro")
     
-    # Verifica se a tabela existe no mapeamento
-    if nome_base not in mapeamento:
+    if nome_base not in DEFINICAO_TABELAS[camada]:
         raise ValueError(
             f"Tabela '{nome_base}' não encontrada na camada {camada}. "
-            f"Tabelas disponíveis: {list(mapeamento.keys())}"
+            f"Tabelas disponíveis: {list(DEFINICAO_TABELAS[camada].keys())}"
         )
-    
-    # Obtém o nome real da tabela do mapeamento
-    nome_tabela = mapeamento[nome_base]
     
     # Retorna com ou sem esquema
     if incluir_esquema:
-        return f"{ESQUEMAS[camada]}.{nome_tabela}"
-    return nome_tabela
+        return f"{ESQUEMAS[camada]}.{nome_base}"
+    return nome_base
 
 def obter_metadados_tabela(camada: str, nome_base: str) -> Dict[str, Any]:
     """Retorna os metadados de uma tabela específica."""
@@ -168,21 +157,7 @@ def obter_metadados_tabela(camada: str, nome_base: str) -> Dict[str, Any]:
     return DEFINICAO_TABELAS[camada][nome_base]
 
 
-# Aliases para compatibilidade com código legado
-TABELAS_BRONZE = {
-    "cotacoes_b3": "cotacoes_b3",     # Cotações B3
-    "series_bacen": "series_bacen"    # Indicadores BACEN
-}
 
-TABELAS_PRATA = {
-    "cotacoes_b3": "tb_mkt_eqt_day",     # Equity Diário
-    "series_bacen": "tb_mkt_idx_eco"      # Índices Econômicos
-}
-
-TABELAS_OURO = {
-    "metricas_b3": "tb_mkt_eqt_perf",    # Performance de Ativos
-    "indicadores_bacen": "tb_mkt_idx_dash" # Dashboard Macro
-}
 
 def timestamp_ingestao() -> datetime:
     """Retorna o instante UTC da captura de dados para rastreabilidade."""
@@ -193,9 +168,6 @@ __all__ = [
     "DEFINICAO_TABELAS",
     "ESQUEMAS",
     "PROPRIEDADES_TABELAS",
-    "TABELAS_BRONZE",
-    "TABELAS_PRATA",
-    "TABELAS_OURO",
     "obter_configuracao",
     "obter_lista_configuracoes",
     "definir_configuracao_local",

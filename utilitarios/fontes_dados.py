@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import pandas as pd
 import requests
 import yfinance as yf
@@ -80,6 +81,8 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     import time
     import random
     from requests.exceptions import RequestException
+    from urllib3.util.retry import Retry
+    from requests.adapters import HTTPAdapter
     
     logger.info(f"Iniciando busca de dados para {len(list(tickers))} tickers")
     logger.info(f"Versão do yfinance: {yf.__version__}")
@@ -93,14 +96,49 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
         logger.error(f"Erro ao converter datas: {str(e)}")
         raise
 
+    # Configuração da sessão global com retry
+    retries = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods={"GET", "HEAD"}
+    )
+    
+    # Teste de conectividade com Yahoo Finance
+    test_url = "https://query2.finance.yahoo.com"
+    logger.info(f"Testando conectividade com {test_url}")
+    try:
+        test_response = requests.get(test_url, timeout=10)
+        logger.info(f"Teste de conectividade: Status {test_response.status_code}")
+    except Exception as e:
+        logger.error(f"Erro no teste de conectividade: {str(e)}")
+        
     # Configuração da sessão global
     session = requests.Session()
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Pragma': 'no-cache',
+        'Upgrade-Insecure-Requests': '1',
+        'X-Requested-With': 'XMLHttpRequest'
     })
+    
+    # Verificar proxy do ambiente
+    proxy_info = {
+        'http': os.environ.get('HTTP_PROXY'),
+        'https': os.environ.get('HTTPS_PROXY')
+    }
+    if any(proxy_info.values()):
+        logger.info(f"Detectado proxy no ambiente: {proxy_info}")
+        session.proxies.update(proxy_info)
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 

@@ -100,9 +100,12 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             ticker_base = ticker.replace('.SA', '')
             ticker_sa = f"{ticker_base}.SA"
             
-            # Configura o ticker com os headers personalizados
-            acao = yf.Ticker(ticker_sa)
-            acao.session.headers.update(headers)
+            # Configura uma sessão personalizada para o ticker
+            session = requests.Session()
+            session.headers.update(headers)
+            
+            # Cria o ticker com a sessão personalizada
+            acao = yf.Ticker(ticker_sa, session=session)
             
             # Tenta obter dados históricos
             historico = acao.history(

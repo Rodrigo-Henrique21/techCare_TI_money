@@ -105,14 +105,27 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     )
     
     # Teste de conectividade com Yahoo Finance
-    test_url = "https://query2.finance.yahoo.com"
-    logger.info(f"Testando conectividade com {test_url}")
-    try:
-        test_response = requests.get(test_url, timeout=10)
-        logger.info(f"Teste de conectividade: Status {test_response.status_code}")
-    except Exception as e:
-        logger.error(f"Erro no teste de conectividade: {str(e)}")
-        
+    test_urls = [
+        "https://query2.finance.yahoo.com",
+        "https://finance.yahoo.com",
+        "https://query1.finance.yahoo.com"
+    ]
+    
+    for test_url in test_urls:
+        logger.info(f"Testando conectividade com {test_url}")
+        try:
+            test_response = requests.get(test_url, timeout=10)
+            logger.info(f"Teste de conectividade: Status {test_response.status_code}")
+            if test_response.status_code == 200:
+                logger.info(f"Conexão bem sucedida com {test_url}")
+                # Usar este URL bem sucedido para o yfinance
+                yf.base_url = test_url
+                break
+            else:
+                logger.warning(f"Conexão com {test_url} retornou status {test_response.status_code}")
+        except Exception as e:
+            logger.error(f"Erro no teste de conectividade com {test_url}: {str(e)}")
+    
     # Configuração da sessão global
     session = requests.Session()
     adapter = HTTPAdapter(max_retries=retries)
@@ -161,24 +174,33 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             logger.info(f"Ticker formatado: {ticker_sa}")
             
             try:
+                # Primeiro tenta fazer uma requisição direta para verificar se o ticker existe
+                info_url = f"{yf.base_url}/v8/finance/chart/{ticker_sa}"
+                logger.info(f"Verificando ticker em {info_url}")
+                
+                info_response = session.get(info_url)
+                if info_response.status_code != 200:
+                    logger.error(f"Erro ao verificar ticker {ticker_sa}: Status {info_response.status_code}")
+                    logger.debug(f"Resposta: {info_response.text[:200]}")  # Log dos primeiros 200 caracteres da resposta
+                    continue
+                
                 # Cria o ticker com a sessão global
                 logger.info(f"Criando objeto Ticker para {ticker_sa}")
-                acao = yf.Ticker(ticker_sa, session=session)
-                logger.debug(f"Objeto Ticker criado com sucesso: {acao}")
+                acao = yf.Ticker(ticker_sa)
                 
                 # Log dos detalhes da sessão
                 logger.info(f"Headers da sessão para {ticker_sa}: {session.headers}")
                 
-                # Tenta obter dados históricos usando o objeto Ticker diretamente
+                # Tenta obter dados históricos usando o download direto
                 logger.info(f"Iniciando download de dados históricos para {ticker_sa}")
                 logger.info(f"Parâmetros: start={inicio_fmt}, end={fim_fmt}, interval=1d")
                 
-                historico = acao.history(
+                historico = yf.download(
+                    tickers=ticker_sa,
                     start=inicio_fmt,
                     end=fim_fmt,
                     interval="1d",
-                    auto_adjust=True,
-                    actions=True,
+                    progress=False,
                     timeout=30
                 )
                 

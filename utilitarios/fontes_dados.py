@@ -73,8 +73,14 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     fim_fmt = _converter_data(fim)
     print(f"Período: {inicio_fmt} até {fim_fmt}")
 
-    # Configuração global do yfinance
-    yf.pdr_override()
+    # Configuração da sessão global
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive'
+    })
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 
@@ -95,26 +101,16 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             ticker_base = ticker.replace('.SA', '')
             ticker_sa = f"{ticker_base}.SA"
             
-            # Configura uma sessão personalizada para o ticker
-            session = requests.Session()
-            session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive'
-            })
+            # Cria o ticker com a sessão global
+            acao = yf.Ticker(ticker_sa, session=session)
             
-            # Cria o ticker com a sessão personalizada
-            acao = yf.Ticker(ticker_sa)
-            acao._session = session  # Use a sessão personalizada
-            
-            # Tenta obter dados históricos
-            historico = yf.download(
-                ticker_sa,
+            # Tenta obter dados históricos usando o objeto Ticker diretamente
+            historico = acao.history(
                 start=inicio_fmt,
                 end=fim_fmt,
-                progress=False,
-                threads=False,
+                interval="1d",
+                auto_adjust=True,
+                actions=True,
                 timeout=30
             )
             

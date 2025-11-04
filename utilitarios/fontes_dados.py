@@ -114,7 +114,7 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
                 start=inicio_fmt,
                 end=fim_fmt,
                 progress=False,
-                show_errors=False,
+                threads=False,
                 timeout=30
             )
             

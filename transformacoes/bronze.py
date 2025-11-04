@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 
 import dlt
+import pandas as pd
 import yfinance as yf
 from pyspark.sql import DataFrame, types as T
 
@@ -91,6 +92,9 @@ def bronze_cotacoes_b3() -> DataFrame:
         # Garante tipos corretos e nomes de colunas padronizados
         pdf = pdf.rename(columns={"Stock Splits": "Stock_Splits"})
         
+        # Trata valores nulos nas datas antes de converter
+        pdf['Date'] = pd.to_datetime(pdf['Date'], errors='coerce')
+        
         # Converte para DataFrame Spark com schema validado
         df = spark.createDataFrame(pdf, schema=schema)
         logger.info(f"Total de registros coletados: {df.count()}")
@@ -164,12 +168,15 @@ def bronze_series_bacen() -> DataFrame:
             logger.warning("Nenhum dado retornado do BACEN")
             return criar_dataframe_vazio(schema)
         
-        # Validação de tipos e tratamento de NaN
+        # Validação de tipos e tratamento de NaN/datas
         pdf = pdf.fillna({
             'data': None,
             'valor': 0.0,
             'serie': 'NA'
         })
+        
+        # Trata valores nulos nas datas
+        pdf['data'] = pd.to_datetime(pdf['data'], errors='coerce')
         
         # Adiciona timestamp de ingestão
         ts_ingestao = timestamp_ingestao()

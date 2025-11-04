@@ -63,6 +63,8 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     Raises:
         ValueError: Se as datas estiverem em formato inválido
     """
+    import yfinance as yf  # Import local para garantir que o módulo está disponível
+    
     print(f"Iniciando busca de dados para {len(list(tickers))} tickers")
     inicio_fmt = _converter_data(inicio)
     fim_fmt = _converter_data(fim)
@@ -84,10 +86,20 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
         try:
             print(f"Buscando dados para {ticker}...")
             ticker_sa = f"{ticker}.SA"
-            historico = yf.Ticker(ticker_sa).history(start=inicio_fmt, end=fim_fmt)
-            
-            if historico.empty:
-                print(f"Nenhum dado encontrado para {ticker}")
+            try:
+                acao = yf.Ticker(ticker_sa)
+                historico = acao.history(start=inicio_fmt, end=fim_fmt, interval="1d")
+                
+                if historico.empty:
+                    print(f"Nenhum dado encontrado para {ticker}")
+                    continue
+                    
+                # Verifica se os dados são válidos tentando acessar informações básicas
+                if not acao.info or 'regularMarketPrice' not in acao.info:
+                    raise ValueError(f"Dados inválidos para {ticker}")
+                    
+            except Exception as e:
+                print(f"Erro ao buscar dados do ticker {ticker}: {str(e)}")
                 continue
                 
             print(f"Encontrados {len(historico)} registros para {ticker}")
@@ -184,6 +196,14 @@ def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
             # Converte data e valor para tipos corretos
             quadro["data"] = pd.to_datetime(quadro["data"], format="%d/%m/%Y")
             quadro["valor"] = pd.to_numeric(quadro["valor"], errors="coerce")
+            
+            # Trata valores nulos
+            quadro = quadro.fillna({
+                "data": pd.NaT,  # Not a Time para datas inválidas
+                "valor": None    # None para valores inválidos
+            })
+            
+            # Remove linhas com datas ou valores inválidos
             quadro = quadro.dropna()
             
             if quadro.empty:

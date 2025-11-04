@@ -25,7 +25,7 @@ logger.addHandler(console_handler)
 
 # Usa a sessão Spark existente do ambiente DLT
 try:
-    spark = SparkSession.active_builder.getOrCreate()
+    spark = SparkSession.active()
     logger.info("Sessão Spark obtida com sucesso do ambiente DLT")
 except Exception as e:
     logger.error(f"Erro ao obter sessão Spark: {str(e)}")
@@ -105,26 +105,17 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     )
     
     # Teste de conectividade com Yahoo Finance
-    test_urls = [
-        "https://query2.finance.yahoo.com",
-        "https://finance.yahoo.com",
-        "https://query1.finance.yahoo.com"
-    ]
-    
-    for test_url in test_urls:
-        logger.info(f"Testando conectividade com {test_url}")
-        try:
-            test_response = requests.get(test_url, timeout=10)
-            logger.info(f"Teste de conectividade: Status {test_response.status_code}")
-            if test_response.status_code == 200:
-                logger.info(f"Conexão bem sucedida com {test_url}")
-                # Usar este URL bem sucedido para o yfinance
-                yf.base_url = test_url
-                break
-            else:
-                logger.warning(f"Conexão com {test_url} retornou status {test_response.status_code}")
-        except Exception as e:
-            logger.error(f"Erro no teste de conectividade com {test_url}: {str(e)}")
+    test_url = "https://finance.yahoo.com"
+    logger.info(f"Testando conectividade com {test_url}")
+    try:
+        test_response = requests.get(test_url, timeout=10)
+        logger.info(f"Teste de conectividade: Status {test_response.status_code}")
+        if test_response.status_code == 200:
+            logger.info("Conexão bem sucedida com Yahoo Finance")
+        else:
+            logger.warning(f"Conexão com Yahoo Finance retornou status {test_response.status_code}")
+    except Exception as e:
+        logger.error(f"Erro no teste de conectividade com Yahoo Finance: {str(e)}")
     
     # Configuração da sessão global
     session = requests.Session()
@@ -174,15 +165,15 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             logger.info(f"Ticker formatado: {ticker_sa}")
             
             try:
-                # Primeiro tenta fazer uma requisição direta para verificar se o ticker existe
-                info_url = f"{yf.base_url}/v8/finance/chart/{ticker_sa}"
-                logger.info(f"Verificando ticker em {info_url}")
+                # Cria o ticker e tenta buscar informações básicas primeiro
+                acao = yf.Ticker(ticker_sa)
+                info = acao.info
                 
-                info_response = session.get(info_url)
-                if info_response.status_code != 200:
-                    logger.error(f"Erro ao verificar ticker {ticker_sa}: Status {info_response.status_code}")
-                    logger.debug(f"Resposta: {info_response.text[:200]}")  # Log dos primeiros 200 caracteres da resposta
+                if not info or not isinstance(info, dict):
+                    logger.error(f"Não foi possível obter informações para {ticker_sa}")
                     continue
+                
+                logger.info(f"Ticker {ticker_sa} validado com sucesso")
                 
                 # Cria o ticker com a sessão global
                 logger.info(f"Criando objeto Ticker para {ticker_sa}")

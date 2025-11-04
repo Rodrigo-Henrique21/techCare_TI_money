@@ -68,23 +68,13 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     import random
     from requests.exceptions import RequestException
     
-    # Configuração do yfinance
-    yf.set_tz_cache_location(None)  # Desabilita cache de timezone que pode causar problemas
-    
     print(f"Iniciando busca de dados para {len(list(tickers))} tickers")
     inicio_fmt = _converter_data(inicio)
     fim_fmt = _converter_data(fim)
     print(f"Período: {inicio_fmt} até {fim_fmt}")
-    
-    # Headers para simular um navegador real
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
-    }
+
+    # Configuração global do yfinance
+    yf.pdr_override()
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 
@@ -105,23 +95,26 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             ticker_base = ticker.replace('.SA', '')
             ticker_sa = f"{ticker_base}.SA"
             
-            # Configura uma sessão personalizada para o ticker com proxies padrão
+            # Configura uma sessão personalizada para o ticker
             session = requests.Session()
-            session.headers.update(headers)
-            session.verify = True
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive'
+            })
             
             # Cria o ticker com a sessão personalizada
             acao = yf.Ticker(ticker_sa)
-            acao.session = session
+            acao._session = session  # Use a sessão personalizada
             
             # Tenta obter dados históricos
-            historico = acao.history(
+            historico = yf.download(
+                ticker_sa,
                 start=inicio_fmt,
                 end=fim_fmt,
-                interval="1d",
-                auto_adjust=True,
-                prepost=False,
-                actions=True,
+                progress=False,
+                show_errors=False,
                 timeout=30
             )
             

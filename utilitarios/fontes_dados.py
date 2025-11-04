@@ -63,12 +63,23 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     Raises:
         ValueError: Se as datas estiverem em formato inválido
     """
-    import yfinance as yf  # Import local para garantir que o módulo está disponível
+    import yfinance as yf
+    import time
+    import random
+    from requests.exceptions import RequestException
+    
+    # Configuração do yfinance
+    yf.set_tz_cache_location(None)  # Desabilita cache de timezone que pode causar problemas
     
     print(f"Iniciando busca de dados para {len(list(tickers))} tickers")
     inicio_fmt = _converter_data(inicio)
     fim_fmt = _converter_data(fim)
     print(f"Período: {inicio_fmt} até {fim_fmt}")
+    
+    # Headers para simular um navegador real
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 
@@ -89,39 +100,46 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
             ticker_base = ticker.replace('.SA', '')
             ticker_sa = f"{ticker_base}.SA"
             
-            try:
-                acao = yf.Ticker(ticker_sa)
-                historico = acao.history(
-                    start=inicio_fmt, 
-                    end=fim_fmt, 
-                    interval="1d",
-                    auto_adjust=True,  # Ajusta preços para eventos corporativos
-                    prepost=False,     # Exclui pre/pos mercado
-                    actions=True,      # Inclui dividendos e splits
-                    timeout=60         # Timeout em segundos
-                )
-                
-                if historico.empty:
-                    print(f"Nenhum dado encontrado para {ticker}")
-                    continue
-                    
-                # Verifica se há dados válidos antes de processar
-                if len(historico) > 0 and not historico.index.empty:
-                    print(f"Dados encontrados para {ticker}: {len(historico)} registros")
-                else:
-                    raise ValueError(f"Dados inválidos ou vazios para {ticker}")
-                    
-            except Exception as e:
-                print(f"Erro ao buscar dados do ticker {ticker}: {str(e)}")
+            # Configura o ticker com os headers personalizados
+            acao = yf.Ticker(ticker_sa)
+            acao.session.headers.update(headers)
+            
+            # Tenta obter dados históricos
+            historico = acao.history(
+                start=inicio_fmt,
+                end=fim_fmt,
+                interval="1d",
+                auto_adjust=True,
+                prepost=False,
+                actions=True,
+                timeout=30
+            )
+            
+            # Verifica se há dados
+            if historico.empty:
+                print(f"Nenhum dado encontrado para {ticker}")
                 continue
                 
-            print(f"Encontrados {len(historico)} registros para {ticker}")
-            historico = historico.reset_index()
-            historico["ticker"] = ticker.upper()
-            quadros.append(historico)
+            print(f"Dados encontrados para {ticker}: {len(historico)} registros")
+            
+            if not historico.empty:
+                historico = historico.reset_index()
+                historico["ticker"] = ticker_base.upper()
+                
+                # Garante que todas as colunas necessárias existem
+                for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']:
+                    if col not in historico.columns:
+                        historico[col] = 0.0
+                
+                # Converte tipos de dados
+                historico['Date'] = pd.to_datetime(historico['Date'])
+                for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']:
+                    historico[col] = pd.to_numeric(historico[col], errors='coerce').fillna(0.0)
+                
+                quadros.append(historico)
             
         except Exception as e:
-            erro_msg = f"Erro ao buscar {ticker}: {str(e)}"
+            erro_msg = f"Erro ao processar {ticker}: {str(e)}"
             print(erro_msg)
             erros.append(erro_msg)
             continue
@@ -136,10 +154,6 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
         return pd.DataFrame(columns=colunas)
     
     print("\nConcatenando resultados...")    
-    if not quadros:
-        print("Nenhum dado encontrado para nenhum ticker!")
-        return pd.DataFrame(columns=colunas)
-        
     resultado = pd.concat(quadros, ignore_index=True)
     
     # Padroniza nomes de colunas

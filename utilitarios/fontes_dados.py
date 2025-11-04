@@ -85,18 +85,31 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     for ticker in tickers:
         try:
             print(f"Buscando dados para {ticker}...")
-            ticker_sa = f"{ticker}.SA"
+            # Remove sufixo .SA se já estiver presente
+            ticker_base = ticker.replace('.SA', '')
+            ticker_sa = f"{ticker_base}.SA"
+            
             try:
                 acao = yf.Ticker(ticker_sa)
-                historico = acao.history(start=inicio_fmt, end=fim_fmt, interval="1d")
+                historico = acao.history(
+                    start=inicio_fmt, 
+                    end=fim_fmt, 
+                    interval="1d",
+                    auto_adjust=True,  # Ajusta preços para eventos corporativos
+                    prepost=False,     # Exclui pre/pos mercado
+                    actions=True,      # Inclui dividendos e splits
+                    timeout=60         # Timeout em segundos
+                )
                 
                 if historico.empty:
                     print(f"Nenhum dado encontrado para {ticker}")
                     continue
                     
-                # Verifica se os dados são válidos tentando acessar informações básicas
-                if not acao.info or 'regularMarketPrice' not in acao.info:
-                    raise ValueError(f"Dados inválidos para {ticker}")
+                # Verifica se há dados válidos antes de processar
+                if len(historico) > 0 and not historico.index.empty:
+                    print(f"Dados encontrados para {ticker}: {len(historico)} registros")
+                else:
+                    raise ValueError(f"Dados inválidos ou vazios para {ticker}")
                     
             except Exception as e:
                 print(f"Erro ao buscar dados do ticker {ticker}: {str(e)}")
@@ -123,9 +136,26 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
         return pd.DataFrame(columns=colunas)
     
     print("\nConcatenando resultados...")    
+    if not quadros:
+        print("Nenhum dado encontrado para nenhum ticker!")
+        return pd.DataFrame(columns=colunas)
+        
     resultado = pd.concat(quadros, ignore_index=True)
+    
+    # Padroniza nomes de colunas
     if "Stock Splits" in resultado.columns:
         resultado = resultado.rename(columns={"Stock Splits": "Stock_Splits"})
+        
+    # Garante tipos de dados corretos
+    resultado['Date'] = pd.to_datetime(resultado['Date'], errors='coerce')
+    resultado = resultado.dropna(subset=['Date'])  # Remove linhas com datas inválidas
+    
+    # Converte valores numéricos
+    colunas_numericas = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']
+    for col in colunas_numericas:
+        if col in resultado.columns:
+            resultado[col] = pd.to_numeric(resultado[col], errors='coerce')
+            resultado[col] = resultado[col].fillna(0.0)
     
     print(f"Total de registros obtidos: {len(resultado)}")
     return resultado
@@ -179,6 +209,8 @@ def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
     except ValueError as e:
         raise ValueError(f"Data deve estar no formato DD/MM/YYYY: {str(e)}")
     
+    # Schema padrão para dados vazios
+    colunas = ["data", "valor", "serie"]
     quadros = []
     erros = []
     
@@ -194,21 +226,18 @@ def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
                 continue
                 
             # Converte data e valor para tipos corretos
-            quadro["data"] = pd.to_datetime(quadro["data"], format="%d/%m/%Y")
+            quadro["data"] = pd.to_datetime(quadro["data"], format="%d/%m/%Y", errors='coerce')
             quadro["valor"] = pd.to_numeric(quadro["valor"], errors="coerce")
             
-            # Trata valores nulos
-            quadro = quadro.fillna({
-                "data": pd.NaT,  # Not a Time para datas inválidas
-                "valor": None    # None para valores inválidos
-            })
-            
             # Remove linhas com datas ou valores inválidos
-            quadro = quadro.dropna()
+            quadro = quadro.dropna(subset=["data", "valor"])
             
             if quadro.empty:
                 erros.append(f"Dados inválidos para série {nome}")
                 continue
+                
+            # Define o tipo da série após limpeza
+            quadro["serie"] = nome
                 
             quadro["serie"] = nome
             quadros.append(quadro)

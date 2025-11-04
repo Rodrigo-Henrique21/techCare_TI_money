@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import pandas as pd
 import requests
 import yfinance as yf
@@ -10,12 +11,24 @@ from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Any, Union
 from pyspark.sql import DataFrame, SparkSession
 
-# Inicializa a sessão Spark
-spark = (SparkSession.builder
-         .appName("dlt-aafn-api_ing-dados")
-         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-         .getOrCreate())
+# Configuração do logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Adiciona um handler para o console com formatação detalhada
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# Usa a sessão Spark existente do ambiente DLT
+try:
+    spark = SparkSession.active_builder.getOrCreate()
+    logger.info("Sessão Spark obtida com sucesso do ambiente DLT")
+except Exception as e:
+    logger.error(f"Erro ao obter sessão Spark: {str(e)}")
+    raise
 
 
 try:  # pragma: no cover - dependência opcional em workspaces Databricks
@@ -68,10 +81,17 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     import random
     from requests.exceptions import RequestException
     
-    print(f"Iniciando busca de dados para {len(list(tickers))} tickers")
-    inicio_fmt = _converter_data(inicio)
-    fim_fmt = _converter_data(fim)
-    print(f"Período: {inicio_fmt} até {fim_fmt}")
+    logger.info(f"Iniciando busca de dados para {len(list(tickers))} tickers")
+    logger.info(f"Versão do yfinance: {yf.__version__}")
+    logger.info(f"Versão do requests: {requests.__version__}")
+    
+    try:
+        inicio_fmt = _converter_data(inicio)
+        fim_fmt = _converter_data(fim)
+        logger.info(f"Período convertido: {inicio_fmt} até {fim_fmt}")
+    except ValueError as e:
+        logger.error(f"Erro ao converter datas: {str(e)}")
+        raise
 
     # Configuração da sessão global
     session = requests.Session()
@@ -96,50 +116,89 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     
     for ticker in tickers:
         try:
-            print(f"Buscando dados para {ticker}...")
+            logger.info(f"=== Iniciando processamento para {ticker} ===")
             # Remove sufixo .SA se já estiver presente
             ticker_base = ticker.replace('.SA', '')
             ticker_sa = f"{ticker_base}.SA"
+            logger.info(f"Ticker formatado: {ticker_sa}")
             
-            # Cria o ticker com a sessão global
-            acao = yf.Ticker(ticker_sa, session=session)
-            
-            # Tenta obter dados históricos usando o objeto Ticker diretamente
-            historico = acao.history(
-                start=inicio_fmt,
-                end=fim_fmt,
-                interval="1d",
-                auto_adjust=True,
-                actions=True,
-                timeout=30
-            )
+            try:
+                # Cria o ticker com a sessão global
+                logger.info(f"Criando objeto Ticker para {ticker_sa}")
+                acao = yf.Ticker(ticker_sa, session=session)
+                logger.debug(f"Objeto Ticker criado com sucesso: {acao}")
+                
+                # Log dos detalhes da sessão
+                logger.info(f"Headers da sessão para {ticker_sa}: {session.headers}")
+                
+                # Tenta obter dados históricos usando o objeto Ticker diretamente
+                logger.info(f"Iniciando download de dados históricos para {ticker_sa}")
+                logger.info(f"Parâmetros: start={inicio_fmt}, end={fim_fmt}, interval=1d")
+                
+                historico = acao.history(
+                    start=inicio_fmt,
+                    end=fim_fmt,
+                    interval="1d",
+                    auto_adjust=True,
+                    actions=True,
+                    timeout=30
+                )
+                
+                logger.info(f"Resposta recebida para {ticker_sa}")
+                logger.debug(f"Tipo de retorno: {type(historico)}")
+                logger.debug(f"Colunas disponíveis: {historico.columns.tolist() if not historico.empty else 'Nenhuma'}")
+                
+            except Exception as e:
+                logger.error(f"Erro ao criar/usar objeto Ticker para {ticker_sa}", exc_info=True)
+                logger.error(f"Detalhes adicionais do erro: {str(e)}")
+                raise
             
             # Verifica se há dados
             if historico.empty:
-                print(f"Nenhum dado encontrado para {ticker}")
+                logger.warning(f"Nenhum dado encontrado para {ticker_sa}")
+                logger.debug("Verificando se o objeto história foi inicializado corretamente")
                 continue
                 
-            print(f"Dados encontrados para {ticker}: {len(historico)} registros")
+            logger.info(f"Dados encontrados para {ticker_sa}: {len(historico)} registros")
+            logger.debug(f"Primeira data disponível: {historico.index.min() if not historico.empty else 'N/A'}")
+            logger.debug(f"Última data disponível: {historico.index.max() if not historico.empty else 'N/A'}")
             
             if not historico.empty:
-                historico = historico.reset_index()
-                historico["ticker"] = ticker_base.upper()
-                
-                # Garante que todas as colunas necessárias existem
-                for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']:
-                    if col not in historico.columns:
-                        historico[col] = 0.0
-                
-                # Converte tipos de dados
-                historico['Date'] = pd.to_datetime(historico['Date'])
-                for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']:
-                    historico[col] = pd.to_numeric(historico[col], errors='coerce').fillna(0.0)
-                
-                quadros.append(historico)
+                logger.info(f"Iniciando processamento dos dados para {ticker_sa}")
+                try:
+                    historico = historico.reset_index()
+                    historico["ticker"] = ticker_base.upper()
+                    
+                    # Garante que todas as colunas necessárias existem
+                    logger.debug(f"Verificando e preenchendo colunas necessárias para {ticker_sa}")
+                    colunas_esperadas = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']
+                    for col in colunas_esperadas:
+                        if col not in historico.columns:
+                            logger.warning(f"Coluna {col} não encontrada para {ticker_sa}. Preenchendo com zeros.")
+                            historico[col] = 0.0
+                    
+                    # Converte tipos de dados
+                    logger.debug(f"Convertendo tipos de dados para {ticker_sa}")
+                    historico['Date'] = pd.to_datetime(historico['Date'])
+                    for col in colunas_esperadas:
+                        logger.debug(f"Convertendo coluna {col} para numérico")
+                        historico[col] = pd.to_numeric(historico[col], errors='coerce')
+                        nulos = historico[col].isnull().sum()
+                        if nulos > 0:
+                            logger.warning(f"{nulos} valores nulos encontrados na coluna {col} para {ticker_sa}")
+                        historico[col] = historico[col].fillna(0.0)
+                    
+                    quadros.append(historico)
+                    logger.info(f"Processamento concluído com sucesso para {ticker_sa}")
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao processar dados de {ticker_sa}", exc_info=True)
+                    raise
             
         except Exception as e:
             erro_msg = f"Erro ao processar {ticker}: {str(e)}"
-            print(erro_msg)
+            logger.error(erro_msg, exc_info=True)
+            logger.error(f"Stack trace completo para {ticker}:", exc_info=True)
             erros.append(erro_msg)
             continue
     

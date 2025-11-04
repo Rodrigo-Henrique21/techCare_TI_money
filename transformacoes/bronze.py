@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 import dlt
+import yfinance as yf
 from pyspark.sql import DataFrame, types as T
 
 from utilitarios.configuracoes import (
@@ -22,6 +24,10 @@ from utilitarios.fontes_dados import (
     criar_dataframe_vazio,
     spark,
 )
+
+# Configuração de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dlt.table(
@@ -60,28 +66,34 @@ def bronze_cotacoes_b3() -> DataFrame:
     ])
 
     try:
+        logger.info(f"Iniciando coleta de dados B3 para {len(tickers)} tickers")
+        logger.info(f"Período: {data_inicial} até {data_final}")
+        
         # Busca dados da API
         pdf = buscar_historico_b3(tickers, data_inicial, data_final)
         
         if pdf.empty:
-            print(f"Nenhum dado encontrado para os tickers: {tickers}")
+            logger.warning(f"Nenhum dado encontrado para os tickers: {tickers}")
             return criar_dataframe_vazio(schema)
             
         # Validação básica dos dados recebidos
-        colunas_esperadas = set(schema.fieldNames())
+        colunas_esperadas = set(schema.fieldNames()) - {"ingestion_timestamp"}  # Ignora timestamp que será adicionado
         colunas_recebidas = set(pdf.columns)
         if not colunas_esperadas.issubset(colunas_recebidas):
             faltantes = colunas_esperadas - colunas_recebidas
             raise ValueError(f"Colunas ausentes nos dados: {faltantes}")
-            
+        
         # Adiciona timestamp de ingestão
-        pdf["ingestion_timestamp"] = timestamp_ingestao()
+        ts_ingestao = timestamp_ingestao()
+        pdf["ingestion_timestamp"] = ts_ingestao
+        logger.info(f"Timestamp de ingestão: {ts_ingestao}")
         
         # Garante tipos corretos e nomes de colunas padronizados
         pdf = pdf.rename(columns={"Stock Splits": "Stock_Splits"})
         
         # Converte para DataFrame Spark com schema validado
         df = spark.createDataFrame(pdf, schema=schema)
+        logger.info(f"Total de registros coletados: {df.count()}")
         
         # Otimiza particionamento e ordenação
         return (df
@@ -90,10 +102,11 @@ def bronze_cotacoes_b3() -> DataFrame:
         )
         
     except ValueError as e:
-        print(f"Erro de validação nos dados B3: {str(e)}")
+        logger.error(f"Erro de validação nos dados B3: {str(e)}")
         return criar_dataframe_vazio(schema)
     except Exception as e:
-        print(f"Erro inesperado ao processar cotações B3: {str(e)}")
+        logger.error(f"Erro inesperado ao processar cotações B3: {str(e)}")
+        logger.error("Stack trace completo:", exc_info=True)
         return criar_dataframe_vazio(schema)
 
 
@@ -141,23 +154,38 @@ def bronze_series_bacen() -> DataFrame:
     ])
 
     try:
+        logger.info(f"Iniciando coleta de {len(series)} séries do BACEN")
+        logger.info(f"Período: {data_inicial} até {data_final}")
+        
         # Busca dados da API
         pdf = buscar_series_bacen(series, data_inicial, data_final)
         
         if pdf.empty:
+            logger.warning("Nenhum dado retornado do BACEN")
             return criar_dataframe_vazio(schema)
-            
+        
+        # Validação de tipos e tratamento de NaN
+        pdf = pdf.fillna({
+            'data': None,
+            'valor': 0.0,
+            'serie': 'NA'
+        })
+        
         # Adiciona timestamp de ingestão
-        pdf["ingestion_timestamp"] = timestamp_ingestao()
+        ts_ingestao = timestamp_ingestao()
+        pdf["ingestion_timestamp"] = ts_ingestao
+        logger.info(f"Timestamp de ingestão: {ts_ingestao}")
         
         # Converte para DataFrame Spark com schema validado
         df = spark.createDataFrame(pdf, schema=schema)
+        logger.info(f"Total de registros coletados: {df.count()}")
         
         # Otimiza particionamento
         return df.repartition("serie")
         
     except Exception as e:
-        print(f"Erro ao processar séries BACEN: {str(e)}")
+        logger.error(f"Erro ao processar séries BACEN: {str(e)}")
+        logger.error("Stack trace completo:", exc_info=True)
         return criar_dataframe_vazio(schema)
 
 

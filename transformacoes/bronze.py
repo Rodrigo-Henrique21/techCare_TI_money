@@ -8,7 +8,6 @@ from datetime import datetime
 
 import dlt
 import pandas as pd
-import yfinance as yf
 from pyspark.sql import DataFrame, types as T
 
 from utilitarios.configuracoes import (
@@ -46,11 +45,9 @@ def bronze_cotacoes_b3() -> DataFrame:
     )
     
     # Datas no formato correto (DD/MM/YYYY)
-    data_inicial = obter_configuracao("b3.start_date", "01/01/2020")
-    data_final = obter_configuracao(
-        "b3.end_date", 
-        datetime.utcnow().strftime("%d/%m/%Y")
-    )
+    hoje = datetime.utcnow()
+    data_final = hoje.strftime("%d/%m/%Y")
+    data_inicial = (hoje - pd.DateOffset(months=3)).strftime("%d/%m/%Y")
 
     # Schema esperado para validação
     schema = T.StructType([
@@ -76,7 +73,7 @@ def bronze_cotacoes_b3() -> DataFrame:
         if pdf.empty:
             logger.warning(f"Nenhum dado encontrado para os tickers: {tickers}")
             return criar_dataframe_vazio(schema)
-            
+        
         # Validação básica dos dados recebidos
         colunas_esperadas = set(schema.fieldNames()) - {"ingestion_timestamp"}  # Ignora timestamp que será adicionado
         colunas_recebidas = set(pdf.columns)
@@ -95,16 +92,22 @@ def bronze_cotacoes_b3() -> DataFrame:
         # Trata valores nulos nas datas antes de converter
         pdf['Date'] = pd.to_datetime(pdf['Date'], errors='coerce')
         
+        # CORREÇÃO: Converte Volume para float para compatibilidade com DoubleType
+        colunas_numericas = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']
+        for col in colunas_numericas:
+            pdf[col] = pd.to_numeric(pdf[col], errors='coerce').astype(float)
+        
         # Converte para DataFrame Spark com schema validado
         df = spark.createDataFrame(pdf, schema=schema)
         logger.info(f"Total de registros coletados: {df.count()}")
         
         # Otimiza particionamento e ordenação
-        return (df
-                .repartition("ticker")
-                .sortWithinPartitions("Date")
+        return (
+            df
+            .repartition("ticker")
+            .sortWithinPartitions("Date")
         )
-        
+    
     except ValueError as e:
         logger.error(f"Erro de validação nos dados B3: {str(e)}")
         return criar_dataframe_vazio(schema)
@@ -124,13 +127,13 @@ def bronze_series_bacen() -> DataFrame:
 
     # Séries econômicas a serem capturadas
     series_padrao = {
-        "selic": 1178,      # Taxa Selic diária
-        "cdi": 12,          # CDI diário
-        "ipca": 433,        # IPCA mensal
+        "selic": 1178,    # Taxa Selic diária
+        "cdi": 12,    # CDI diário
+        "ipca": 433,    # IPCA mensal
         "poupanca": 195,    # Rendimento poupança mensal
-        "igpm": 189,        # IGP-M mensal
-        "inpc": 188,        # INPC mensal
-        "igpdi": 190,       # IGP-DI mensal
+        "igpm": 189,    # IGP-M mensal
+        "inpc": 188,    # INPC mensal
+        "igpdi": 190,    # IGP-DI mensal
         "selic_meta": 432,  # Meta Selic definida pelo COPOM
     }
     
@@ -169,11 +172,12 @@ def bronze_series_bacen() -> DataFrame:
             return criar_dataframe_vazio(schema)
         
         # Validação de tipos e tratamento de NaN/datas
-        pdf = pdf.fillna({
-            'data': None,
-            'valor': 0.0,
-            'serie': 'NA'
-        })
+        # CORREÇÃO: Remove linhas com data nula antes de preencher
+        pdf = pdf.dropna(subset=['data'])
+        
+        # Preenche valores nulos nas colunas numéricas e de texto
+        pdf['valor'] = pdf['valor'].fillna(0.0)
+        pdf['serie'] = pdf['serie'].fillna('NA')
         
         # Trata valores nulos nas datas
         pdf['data'] = pd.to_datetime(pdf['data'], errors='coerce')
@@ -189,7 +193,7 @@ def bronze_series_bacen() -> DataFrame:
         
         # Otimiza particionamento
         return df.repartition("serie")
-        
+    
     except Exception as e:
         logger.error(f"Erro ao processar séries BACEN: {str(e)}")
         logger.error("Stack trace completo:", exc_info=True)

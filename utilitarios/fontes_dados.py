@@ -1,4 +1,4 @@
-"""Conexões e funções de captura de dados externos utilizados pelo pipeline."""
+"""Conexões e funções de captura de dados externos utilizados pelo pipeline - Versão Refatorada com brapi.dev e sgs."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import logging
 import os
 import pandas as pd
 import requests
-import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Optional, Any, Union
 from pyspark.sql import DataFrame, SparkSession
+import time
 
 # Configuração do logger
 logger = logging.getLogger(__name__)
@@ -31,10 +31,12 @@ except Exception as e:
     logger.error(f"Erro ao obter sessão Spark: {str(e)}")
     raise
 
-
-try:  # pragma: no cover - dependência opcional em workspaces Databricks
-    import sgs  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover - tratamos o fallback manualmente
+# Importa biblioteca sgs para dados do BACEN
+try:
+    import sgs
+    logger.info("Biblioteca sgs importada com sucesso")
+except ModuleNotFoundError:
+    logger.warning("Biblioteca sgs não encontrada. Instale com: pip install sgs")
     sgs = None
 
 
@@ -49,7 +51,7 @@ def _converter_data(data: str, formato_entrada: str = "%d/%m/%Y", formato_saida:
     
     Returns:
         Data convertida no formato de saída
-        
+    
     Raises:
         ValueError: Se a data estiver em formato inválido
     """
@@ -58,91 +60,65 @@ def _converter_data(data: str, formato_entrada: str = "%d/%m/%Y", formato_saida:
     except ValueError as e:
         raise ValueError(f"Formato de data inválido. Use {formato_entrada}. Erro: {str(e)}")
 
-def criar_dataframe_vazio(schema: Any) -> DataFrame:
-    """Cria um DataFrame vazio com o schema especificado."""
-    return spark.createDataFrame([], schema)
 
-def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.DataFrame:
+def buscar_historico_b3(
+    tickers: Iterable[str], 
+    inicio: str, 
+    fim: str,
+    api_key: Optional[str] = None
+) -> pd.DataFrame:
     """
-    Baixa o histórico de preços dos tickers configurados no Yahoo Finance.
+    Busca histórico de preços dos tickers usando a API brapi.dev.
+    
+    LIMITAÇÕES DO PLANO BÁSICO:
+    - 1 ativo por requisição (não múltiplos)
+    - Dados históricos de apenas 3 meses
+    - 15.000 requisições por mês
     
     Args:
-        tickers: Lista de códigos de ações (ex: PETR4.SA)
+        tickers: Lista de códigos de ações (ex: ["PETR4", "VALE3", "MGLU3"])
         inicio: Data inicial no formato DD/MM/YYYY
         fim: Data final no formato DD/MM/YYYY
-        
+        api_key: Token da API brapi (opcional, usa token padrão se não fornecido)
+    
     Returns:
         DataFrame com histórico de preços
-        
+    
     Raises:
         ValueError: Se as datas estiverem em formato inválido
     """
-    import yfinance as yf
-    import time
-    import random
-    from requests.exceptions import RequestException
-    from urllib3.util.retry import Retry
-    from requests.adapters import HTTPAdapter
+    logger.info("=== INICIANDO BUSCA COM BRAPI.DEV ===")
+    logger.info(f"Tickers solicitados: {list(tickers)}")
+    logger.info(f"Período: {inicio} até {fim}")
     
-    logger.info(f"Iniciando busca de dados para {len(list(tickers))} tickers")
-    logger.info(f"Versão do yfinance: {yf.__version__}")
-    logger.info(f"Versão do requests: {requests.__version__}")
+    # Token da API
+    BRAPI_TOKEN = api_key or "bskwmkRoxVSMKPwR5HHUSE"
+    BASE_URL = "https://brapi.dev/api/quote"
     
+    # Valida datas
     try:
         inicio_fmt = _converter_data(inicio)
         fim_fmt = _converter_data(fim)
-        logger.info(f"Período convertido: {inicio_fmt} até {fim_fmt}")
     except ValueError as e:
-        logger.error(f"Erro ao converter datas: {str(e)}")
+        logger.error(f"Erro ao validar datas: {str(e)}")
         raise
-
-    # Configuração da sessão global com retry
-    retries = Retry(
-        total=5,
-        backoff_factor=0.5,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods={"GET", "HEAD"}
-    )
     
-    # Teste de conectividade com Yahoo Finance
-    test_url = "https://finance.yahoo.com"
-    logger.info(f"Testando conectividade com {test_url}")
-    try:
-        test_response = requests.get(test_url, timeout=10)
-        logger.info(f"Teste de conectividade: Status {test_response.status_code}")
-        if test_response.status_code == 200:
-            logger.info("Conexão bem sucedida com Yahoo Finance")
-        else:
-            logger.warning(f"Conexão com Yahoo Finance retornou status {test_response.status_code}")
-    except Exception as e:
-        logger.error(f"Erro no teste de conectividade com Yahoo Finance: {str(e)}")
+    # Calcula diferença de dias
+    data_inicio = datetime.strptime(inicio, "%d/%m/%Y")
+    data_fim = datetime.strptime(fim, "%d/%m/%Y")
+    dias_diferenca = (data_fim - data_inicio).days
     
-    # Configuração da sessão global
-    session = requests.Session()
-    adapter = HTTPAdapter(max_retries=retries)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
+    # LIMITAÇÃO: Plano básico só permite 3 meses (90 dias)
+    if dias_diferenca > 90:
+        logger.warning(f"⚠️ ATENÇÃO: Período solicitado ({dias_diferenca} dias) excede o limite do plano básico (90 dias)")
+        logger.warning(f"Ajustando para buscar apenas os últimos 3 meses")
+        data_inicio = data_fim - timedelta(days=90)
+        inicio_fmt = data_inicio.strftime("%Y-%m-%d")
+        logger.info(f"Novo período: {data_inicio.strftime('%d/%m/%Y')} até {fim}")
     
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Pragma': 'no-cache',
-        'Upgrade-Insecure-Requests': '1',
-        'X-Requested-With': 'XMLHttpRequest'
-    })
-    
-    # Verificar proxy do ambiente
-    proxy_info = {
-        'http': os.environ.get('HTTP_PROXY'),
-        'https': os.environ.get('HTTPS_PROXY')
-    }
-    if any(proxy_info.values()):
-        logger.info(f"Detectado proxy no ambiente: {proxy_info}")
-        session.proxies.update(proxy_info)
+    # Define range para API (3mo = 3 meses)
+    range_api = "3mo"
+    logger.info(f"Range calculado para API: {range_api}")
     
     colunas = [
         "Date", "Open", "High", "Low", "Close", 
@@ -151,236 +127,411 @@ def buscar_historico_b3(tickers: Iterable[str], inicio: str, fim: str) -> pd.Dat
     
     quadros: List[pd.DataFrame] = []
     erros: List[str] = []
+    avisos: List[str] = []
     
     if not tickers:
-        print("Nenhum ticker fornecido!")
+        logger.error("Nenhum ticker fornecido!")
         return pd.DataFrame(columns=colunas)
     
-    for ticker in tickers:
+    tickers_list = list(tickers)
+    total_tickers = len(tickers_list)
+    
+    logger.info(f"Total de tickers a processar: {total_tickers}")
+    logger.info(f"Requisições estimadas: {total_tickers} (1 por ticker - limitação do plano básico)")
+    
+    # LIMITAÇÃO: Processar 1 ticker por vez (plano básico não permite múltiplos)
+    for idx, ticker in enumerate(tickers_list):
         try:
-            logger.info(f"=== Iniciando processamento para {ticker} ===")
-            # Remove sufixo .SA se já estiver presente
-            ticker_base = ticker.replace('.SA', '')
-            ticker_sa = f"{ticker_base}.SA"
-            logger.info(f"Ticker formatado: {ticker_sa}")
+            ticker_base = ticker.replace('.SA', '').upper()
+            logger.info(f"[{idx+1}/{total_tickers}] Processando: {ticker_base}")
             
-            try:
-                # Cria o ticker e tenta buscar informações básicas primeiro
-                acao = yf.Ticker(ticker_sa)
-                info = acao.info
-                
-                if not info or not isinstance(info, dict):
-                    logger.error(f"Não foi possível obter informações para {ticker_sa}")
-                    continue
-                
-                logger.info(f"Ticker {ticker_sa} validado com sucesso")
-                
-                # Cria o ticker com a sessão global
-                logger.info(f"Criando objeto Ticker para {ticker_sa}")
-                acao = yf.Ticker(ticker_sa)
-                
-                # Log dos detalhes da sessão
-                logger.info(f"Headers da sessão para {ticker_sa}: {session.headers}")
-                
-                # Tenta obter dados históricos usando o download direto
-                logger.info(f"Iniciando download de dados históricos para {ticker_sa}")
-                logger.info(f"Parâmetros: start={inicio_fmt}, end={fim_fmt}, interval=1d")
-                
-                historico = yf.download(
-                    tickers=ticker_sa,
-                    start=inicio_fmt,
-                    end=fim_fmt,
-                    interval="1d",
-                    progress=False,
-                    timeout=30
-                )
-                
-                logger.info(f"Resposta recebida para {ticker_sa}")
-                logger.debug(f"Tipo de retorno: {type(historico)}")
-                logger.debug(f"Colunas disponíveis: {historico.columns.tolist() if not historico.empty else 'Nenhuma'}")
-                
-            except Exception as e:
-                logger.error(f"Erro ao criar/usar objeto Ticker para {ticker_sa}", exc_info=True)
-                logger.error(f"Detalhes adicionais do erro: {str(e)}")
-                raise
+            # Delay entre requisições para evitar rate limit
+            if idx > 0:
+                delay = 2  # 2 segundos entre requisições
+                logger.info(f"Aguardando {delay}s antes da próxima requisição...")
+                time.sleep(delay)
             
-            # Verifica se há dados
-            if historico.empty:
-                logger.warning(f"Nenhum dado encontrado para {ticker_sa}")
-                logger.debug("Verificando se o objeto história foi inicializado corretamente")
-                continue
-                
-            logger.info(f"Dados encontrados para {ticker_sa}: {len(historico)} registros")
-            logger.debug(f"Primeira data disponível: {historico.index.min() if not historico.empty else 'N/A'}")
-            logger.debug(f"Última data disponível: {historico.index.max() if not historico.empty else 'N/A'}")
+            # Monta URL para 1 ticker apenas (limitação do plano)
+            url = f"{BASE_URL}/{ticker_base}"
+            params = {
+                "range": range_api,
+                "interval": "1d",
+                "fundamental": "false",
+                "token": BRAPI_TOKEN
+            }
             
-            if not historico.empty:
-                logger.info(f"Iniciando processamento dos dados para {ticker_sa}")
+            logger.info(f"Requisição: GET {url}")
+            logger.debug(f"Parâmetros: {params}")
+            
+            # Faz requisição com retry
+            max_tentativas = 3
+            tentativa = 0
+            resposta = None
+            
+            while tentativa < max_tentativas:
+                tentativa += 1
                 try:
-                    historico = historico.reset_index()
-                    historico["ticker"] = ticker_base.upper()
+                    logger.info(f"Tentativa {tentativa}/{max_tentativas}")
+                    resposta = requests.get(url, params=params, timeout=30)
                     
-                    # Garante que todas as colunas necessárias existem
-                    logger.debug(f"Verificando e preenchendo colunas necessárias para {ticker_sa}")
-                    colunas_esperadas = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']
-                    for col in colunas_esperadas:
-                        if col not in historico.columns:
-                            logger.warning(f"Coluna {col} não encontrada para {ticker_sa}. Preenchendo com zeros.")
-                            historico[col] = 0.0
+                    if resposta.status_code == 429:
+                        logger.warning(f"Rate limit atingido. Aguardando 10s...")
+                        time.sleep(10)
+                        continue
                     
-                    # Converte tipos de dados
-                    logger.debug(f"Convertendo tipos de dados para {ticker_sa}")
-                    historico['Date'] = pd.to_datetime(historico['Date'])
-                    for col in colunas_esperadas:
-                        logger.debug(f"Convertendo coluna {col} para numérico")
-                        historico[col] = pd.to_numeric(historico[col], errors='coerce')
-                        nulos = historico[col].isnull().sum()
-                        if nulos > 0:
-                            logger.warning(f"{nulos} valores nulos encontrados na coluna {col} para {ticker_sa}")
-                        historico[col] = historico[col].fillna(0.0)
+                    resposta.raise_for_status()
+                    break
                     
-                    quadros.append(historico)
-                    logger.info(f"Processamento concluído com sucesso para {ticker_sa}")
-                    
-                except Exception as e:
-                    logger.error(f"Erro ao processar dados de {ticker_sa}", exc_info=True)
-                    raise
+                except requests.exceptions.HTTPError as e:
+                    if resposta and resposta.status_code == 429:
+                        if tentativa < max_tentativas:
+                            logger.warning(f"Rate limit. Tentando novamente em 10s...")
+                            time.sleep(10)
+                            continue
+                        else:
+                            erro_msg = f"Rate limit excedido para {ticker_base} após {max_tentativas} tentativas"
+                            logger.error(erro_msg)
+                            erros.append(erro_msg)
+                            break
+                    else:
+                        raise
+            
+            if not resposta or resposta.status_code != 200:
+                erros.append(f"Falha ao buscar {ticker_base}")
+                continue
+            
+            dados = resposta.json()
+            logger.debug(f"Resposta recebida: {len(str(dados))} caracteres")
+            
+            # Verifica estrutura da resposta
+            if "results" not in dados or not dados["results"]:
+                aviso = f"Nenhum dado retornado para {ticker_base}"
+                logger.warning(aviso)
+                avisos.append(aviso)
+                continue
+            
+            resultado = dados["results"][0]
+            
+            # Verifica se há dados históricos
+            if "historicalDataPrice" not in resultado or not resultado["historicalDataPrice"]:
+                aviso = f"Sem dados históricos para {ticker_base}"
+                logger.warning(aviso)
+                avisos.append(aviso)
+                continue
+            
+            historico_data = resultado["historicalDataPrice"]
+            logger.info(f"Dados históricos encontrados: {len(historico_data)} registros")
+            
+            # Converte para DataFrame
+            df_historico = pd.DataFrame(historico_data)
+            
+            # Converte timestamp para data
+            df_historico['Date'] = pd.to_datetime(df_historico['date'], unit='s')
+            
+            # Renomeia colunas para padrão
+            mapeamento_colunas = {
+                'open': 'Open',
+                'high': 'High',
+                'low': 'Low',
+                'close': 'Close',
+                'volume': 'Volume'
+            }
+            df_historico = df_historico.rename(columns=mapeamento_colunas)
+            
+            # Adiciona colunas faltantes
+            df_historico['Dividends'] = 0.0
+            df_historico['Stock_Splits'] = 0.0
+            df_historico['ticker'] = ticker_base
+            
+            # Seleciona apenas colunas necessárias
+            df_historico = df_historico[colunas]
+            
+            # Filtra pelo período solicitado (se necessário)
+            df_historico = df_historico[
+                (df_historico['Date'] >= inicio_fmt) & 
+                (df_historico['Date'] <= fim_fmt)
+            ]
+            
+            if df_historico.empty:
+                aviso = f"Nenhum dado no período para {ticker_base}"
+                logger.warning(aviso)
+                avisos.append(aviso)
+                continue
+            
+            logger.info(f"✓ {ticker_base}: {len(df_historico)} registros processados")
+            quadros.append(df_historico)
             
         except Exception as e:
             erro_msg = f"Erro ao processar {ticker}: {str(e)}"
             logger.error(erro_msg, exc_info=True)
-            logger.error(f"Stack trace completo para {ticker}:", exc_info=True)
             erros.append(erro_msg)
             continue
     
+    # Relatório final
+    if avisos:
+        logger.warning(f"\n=== AVISOS DURANTE A BUSCA ({len(avisos)}) ===")
+        for aviso in avisos:
+            logger.warning(f"  - {aviso}")
+    
     if erros:
-        print("\nAvisos durante a busca de dados:")
+        logger.error(f"\n=== ERROS DURANTE A BUSCA ({len(erros)}) ===")
         for erro in erros:
-            print(f"- {erro}")
-            
+            logger.error(f"  - {erro}")
+    
     if not quadros:
-        print("Nenhum dado encontrado para nenhum ticker!")
+        logger.error("Nenhum dado encontrado para nenhum ticker!")
         return pd.DataFrame(columns=colunas)
     
-    print("\nConcatenando resultados...")    
+    logger.info(f"\n=== RESUMO ===")
+    logger.info(f"Tickers processados com sucesso: {len(quadros)}/{total_tickers}")
+    
     resultado = pd.concat(quadros, ignore_index=True)
     
-    # Padroniza nomes de colunas
-    if "Stock Splits" in resultado.columns:
-        resultado = resultado.rename(columns={"Stock Splits": "Stock_Splits"})
-        
     # Garante tipos de dados corretos
     resultado['Date'] = pd.to_datetime(resultado['Date'], errors='coerce')
-    resultado = resultado.dropna(subset=['Date'])  # Remove linhas com datas inválidas
+    resultado = resultado.dropna(subset=['Date'])
     
-    # Converte valores numéricos
     colunas_numericas = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits']
     for col in colunas_numericas:
-        if col in resultado.columns:
-            resultado[col] = pd.to_numeric(resultado[col], errors='coerce')
-            resultado[col] = resultado[col].fillna(0.0)
+        resultado[col] = pd.to_numeric(resultado[col], errors='coerce')
+        resultado[col] = resultado[col].fillna(0.0)
     
-    print(f"Total de registros obtidos: {len(resultado)}")
+    logger.info(f"Total de registros obtidos: {len(resultado)}")
+    logger.info(f"Período coberto: {resultado['Date'].min()} até {resultado['Date'].max()}")
+    logger.info("=== BUSCA FINALIZADA ===\n")
+    
     return resultado
 
 
-def _normalizar_dataframe_bacen(nome, quadro):
-    # Check if the index contains non-date values (e.g., error messages)
-    if isinstance(quadro.index[0], str) and not quadro.index[0].replace("-", "").isdigit():
-        raise ValueError(f"BACEN API returned an error for series '{nome}': {quadro.index[0]}")
-    quadro.index = pd.to_datetime(quadro.index, errors="coerce")
-    if quadro.index.isnull().any():
-        raise ValueError(f"Failed to parse some dates for series '{nome}'.")
-    return quadro
+def criar_dataframe_vazio(schema: Any) -> DataFrame:
+    """Cria um DataFrame vazio com o schema especificado."""
+    return spark.createDataFrame([], schema)
 
+# ============================================================================
+# FUNÇÕES BACEN - REFATORADAS COM SGS
+# ============================================================================
 
-def format_bacen_date(date_str):
-    return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-
-
-def _buscar_com_requests(
-    codigo: int,
-    inicio_fmt: str,
-    fim_fmt: str
-) -> pd.DataFrame:
+def buscar_series_bacen(series: Dict[str, int], inicio: str, fim: str) -> pd.DataFrame:
+    """
+    Busca séries temporais do BACEN usando a biblioteca sgs.
     
-    url = (
-        f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
-        f"?formato=json&dataInicial={inicio_fmt}&dataFinal={fim_fmt}"
-    )
-    headers = {"Accept": "application/json"}
-    resposta = requests.get(
-        url,
-        headers=headers,
-        timeout=30
-    )
-    resposta.raise_for_status()
-    dados = resposta.json()
-    # If dados is a dict, wrap in a list for DataFrame creation
-    if isinstance(dados, dict):
-        quadro = pd.DataFrame([dados])
-    else:
-        quadro = pd.DataFrame(dados)
-    return quadro
-
-def buscar_series_bacen(series: dict, inicio: str, fim: str) -> pd.DataFrame:
-    """Busca séries temporais no BACEN."""
-    # Converte datas para o formato esperado pelo BACEN (DD/MM/YYYY)
+    Esta função substitui a implementação anterior com requests diretos,
+    utilizando a biblioteca sgs que oferece:
+    - Retry automático
+    - Cache de requisições
+    - Melhor tratamento de erros
+    - Interface mais simples
+    
+    Args:
+        series: Dicionário com nome da série como chave e código como valor
+                Exemplo: {"IPCA": 433, "CDI": 12, "SELIC": 432}
+        inicio: Data inicial no formato DD/MM/YYYY
+        fim: Data final no formato DD/MM/YYYY
+    
+    Returns:
+        DataFrame com colunas:
+        - data: Data da observação
+        - valor: Valor da série temporal
+        - serie: Nome da série
+    
+    Raises:
+        ValueError: Se as datas estiverem em formato inválido
+        ModuleNotFoundError: Se a biblioteca sgs não estiver instalada
+        
+    Exemplo:
+        >>> series = {"IPCA": 433, "CDI": 12}
+        >>> df = buscar_series_bacen(series, "01/01/2024", "31/12/2024")
+        >>> print(df.head())
+    """
+    logger.info(f"=== INICIANDO BUSCA DE SÉRIES BACEN COM SGS ===")
+    logger.info(f"Séries solicitadas: {list(series.keys())}")
+    logger.info(f"Período: {inicio} até {fim}")
+    
+    # Verifica se a biblioteca sgs está disponível
+    if sgs is None:
+        erro_msg = (
+            "Biblioteca sgs não encontrada. "
+            "Instale com: pip install sgs"
+        )
+        logger.error(erro_msg)
+        raise ModuleNotFoundError(erro_msg)
+    
+    # Valida formato das datas
     try:
-        inicio_fmt = datetime.strptime(inicio, "%d/%m/%Y").strftime("%d/%m/%Y")
-        fim_fmt = datetime.strptime(fim, "%d/%m/%Y").strftime("%d/%m/%Y")
+        data_inicio = datetime.strptime(inicio, "%d/%m/%Y")
+        data_fim = datetime.strptime(fim, "%d/%m/%Y")
+    except ValueError as e:
+        erro_msg = f"Data deve estar no formato DD/MM/YYYY: {str(e)}"
+        logger.error(erro_msg)
+        raise ValueError(erro_msg)
+    
+    # Valida que há séries para buscar
+    if not series:
+        logger.warning("Nenhuma série fornecida!")
+        return pd.DataFrame(columns=["data", "valor", "serie"])
+    
+    quadros: List[pd.DataFrame] = []
+    erros: List[str] = []
+    
+    # Processa cada série individualmente
+    for nome_serie, codigo_serie in series.items():
+        try:
+            logger.info(f"Buscando série '{nome_serie}' (código: {codigo_serie})")
+            
+            # Usa sgs.time_serie para buscar uma série individual
+            # A biblioteca sgs já faz retry automático e cache
+            serie_temporal = sgs.time_serie(
+                codigo_serie,
+                start=inicio,
+                end=fim
+            )
+            
+            # Verifica se retornou dados
+            if serie_temporal is None or serie_temporal.empty:
+                logger.warning(f"Nenhum dado retornado para '{nome_serie}' (código {codigo_serie})")
+                erros.append(f"Nenhum dado retornado para {nome_serie}")
+                continue
+            
+            # Converte Series do pandas para DataFrame
+            df_serie = serie_temporal.to_frame(name='valor')
+            df_serie = df_serie.reset_index()
+            df_serie.columns = ['data', 'valor']
+            
+            # Adiciona nome da série
+            df_serie['serie'] = nome_serie
+            
+            # Garante tipos corretos
+            df_serie['data'] = pd.to_datetime(df_serie['data'], errors='coerce')
+            df_serie['valor'] = pd.to_numeric(df_serie['valor'], errors='coerce')
+            
+            # Remove linhas com dados inválidos
+            antes = len(df_serie)
+            df_serie = df_serie.dropna(subset=['data', 'valor'])
+            depois = len(df_serie)
+            
+            if antes > depois:
+                logger.warning(f"Removidas {antes - depois} linhas com dados inválidos de '{nome_serie}'")
+            
+            if df_serie.empty:
+                logger.warning(f"Todos os dados de '{nome_serie}' eram inválidos")
+                erros.append(f"Dados inválidos para série {nome_serie}")
+                continue
+            
+            quadros.append(df_serie)
+            logger.info(f"✓ {nome_serie}: {len(df_serie)} registros obtidos")
+            
+        except Exception as e:
+            erro_msg = f"Erro ao buscar '{nome_serie}' (código {codigo_serie}): {str(e)}"
+            logger.error(erro_msg)
+            erros.append(erro_msg)
+            continue
+    
+    # Reporta erros
+    if erros:
+        logger.warning(f"\n=== AVISOS DURANTE A BUSCA ({len(erros)}) ===")
+        for erro in erros:
+            logger.warning(f"  - {erro}")
+    
+    # Consolida resultados
+    if not quadros:
+        logger.error("Nenhum dado encontrado para nenhuma série!")
+        return pd.DataFrame(columns=["data", "valor", "serie"])
+    
+    logger.info(f"\n=== CONSOLIDANDO RESULTADOS ===")
+    resultado_final = pd.concat(quadros, ignore_index=True)
+    
+    # Ordenação final
+    resultado_final = resultado_final.sort_values(['serie', 'data']).reset_index(drop=True)
+    
+    logger.info(f"✓ Total de registros obtidos: {len(resultado_final)}")
+    logger.info(f"✓ Séries com dados: {resultado_final['serie'].nunique()}")
+    logger.info(f"✓ Período coberto: {resultado_final['data'].min()} até {resultado_final['data'].max()}")
+    logger.info(f"=== BUSCA CONCLUÍDA COM SUCESSO ===\n")
+    
+    return resultado_final
+
+
+def buscar_multiplas_series_bacen(
+    codigos_series: Union[List[int], Dict[str, int]], 
+    inicio: str, 
+    fim: str
+) -> pd.DataFrame:
+    """
+    Busca múltiplas séries do BACEN de forma otimizada usando sgs.dataframe.
+    
+    Esta função é mais eficiente quando você precisa buscar várias séries
+    simultaneamente, pois usa sgs.dataframe que faz requisições em paralelo.
+    
+    Args:
+        codigos_series: Lista de códigos ou dicionário {nome: código}
+                       Exemplo: [433, 12, 432] ou {"IPCA": 433, "CDI": 12}
+        inicio: Data inicial no formato DD/MM/YYYY
+        fim: Data final no formato DD/MM/YYYY
+    
+    Returns:
+        DataFrame com as séries em colunas (formato wide)
+        - Index: Datas
+        - Colunas: Códigos ou nomes das séries
+    
+    Exemplo:
+        >>> # Com lista de códigos
+        >>> df = buscar_multiplas_series_bacen([433, 12], "01/01/2024", "31/12/2024")
+        >>> 
+        >>> # Com dicionário (nomes personalizados)
+        >>> series = {"IPCA": 433, "CDI": 12}
+        >>> df = buscar_multiplas_series_bacen(series, "01/01/2024", "31/12/2024")
+    """
+    logger.info(f"=== BUSCA OTIMIZADA DE MÚLTIPLAS SÉRIES BACEN ===")
+    
+    # Verifica se a biblioteca sgs está disponível
+    if sgs is None:
+        raise ModuleNotFoundError("Biblioteca sgs não encontrada. Instale com: pip install sgs")
+    
+    # Valida datas
+    try:
+        datetime.strptime(inicio, "%d/%m/%Y")
+        datetime.strptime(fim, "%d/%m/%Y")
     except ValueError as e:
         raise ValueError(f"Data deve estar no formato DD/MM/YYYY: {str(e)}")
     
-    # Schema padrão para dados vazios
-    colunas = ["data", "valor", "serie"]
-    quadros = []
-    erros = []
-    
-    for nome, codigo in series.items():
-        try:
-            quadro = _buscar_com_requests(codigo, inicio_fmt, fim_fmt)
-            if quadro.empty:
-                erros.append(f"Nenhum dado retornado para {nome} (código {codigo})")
-                continue
-            
-            if "error" in quadro.columns:
-                erros.append(f"Erro na série {nome}: {quadro['error'].iloc[0]}")
-                continue
-                
-            # Converte data e valor para tipos corretos
-            quadro["data"] = pd.to_datetime(quadro["data"], format="%d/%m/%Y", errors='coerce')
-            quadro["valor"] = pd.to_numeric(quadro["valor"], errors="coerce")
-            
-            # Remove linhas com datas ou valores inválidos
-            quadro = quadro.dropna(subset=["data", "valor"])
-            
-            if quadro.empty:
-                erros.append(f"Dados inválidos para série {nome}")
-                continue
-                
-            # Define o tipo da série após limpeza
-            quadro["serie"] = nome
-                
-            quadro["serie"] = nome
-            quadros.append(quadro)
-            
-        except Exception as e:
-            erros.append(f"Erro ao buscar {nome}: {str(e)}")
-            continue
-    
-    if erros:
-        print("Avisos durante a busca de séries BACEN:")
-        for erro in erros:
-            print(f"- {erro}")
-    
-    if not quadros:
-        return pd.DataFrame(columns=["data", "valor", "serie"])
+    try:
+        # Se for dicionário, extrai os códigos
+        if isinstance(codigos_series, dict):
+            codigos = list(codigos_series.values())
+            nomes = list(codigos_series.keys())
+            logger.info(f"Buscando {len(codigos)} séries: {nomes}")
+        else:
+            codigos = codigos_series
+            nomes = None
+            logger.info(f"Buscando {len(codigos)} séries: {codigos}")
         
-    return pd.concat(quadros, ignore_index=True)
+        # Usa sgs.dataframe para buscar múltiplas séries de uma vez
+        df = sgs.dataframe(
+            codigos,
+            start=inicio,
+            end=fim
+        )
+        
+        # Se temos nomes personalizados, renomeia as colunas
+        if nomes:
+            # Cria mapeamento de código para nome
+            mapeamento = dict(zip(codigos, nomes))
+            df.columns = [mapeamento.get(col, col) for col in df.columns]
+        
+        logger.info(f"✓ {len(df)} registros obtidos para {len(df.columns)} séries")
+        logger.info(f"✓ Período: {df.index.min()} até {df.index.max()}")
+        
+        return df
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar séries: {str(e)}")
+        raise
 
 
 __all__ = [
+    "BrapiClient",
     "buscar_historico_b3",
     "buscar_series_bacen",
+    "buscar_multiplas_series_bacen",
+    "criar_dataframe_vazio",
 ]

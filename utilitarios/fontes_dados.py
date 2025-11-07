@@ -92,7 +92,7 @@ def buscar_historico_b3(
     logger.info(f"Período: {inicio} até {fim}")
     
     # Token da API
-    BRAPI_TOKEN = api_key or "bskwmkRoxVSMKPwR5HHUSE"
+    BRAPI_TOKEN = api_key or ""
     BASE_URL = "https://brapi.dev/api/quote"
     
     # Valida datas
@@ -175,7 +175,7 @@ def buscar_historico_b3(
                     resposta = requests.get(url, params=params, timeout=30)
                     
                     if resposta.status_code == 429:
-                        logger.warning(f"Rate limit atingido. Aguardando 10s...")
+                        logger.warning("Rate limit atingido. Aguardando 10s...")
                         time.sleep(10)
                         continue
                     
@@ -185,7 +185,7 @@ def buscar_historico_b3(
                 except requests.exceptions.HTTPError as e:
                     if resposta and resposta.status_code == 429:
                         if tentativa < max_tentativas:
-                            logger.warning(f"Rate limit. Tentando novamente em 10s...")
+                            logger.warning("Rate limit. Tentando novamente em 10s...")
                             time.sleep(10)
                             continue
                         else:
@@ -481,7 +481,7 @@ def buscar_multiplas_series_bacen(
         >>> series = {"IPCA": 433, "CDI": 12}
         >>> df = buscar_multiplas_series_bacen(series, "01/01/2024", "31/12/2024")
     """
-    logger.info(f"=== BUSCA OTIMIZADA DE MÚLTIPLAS SÉRIES BACEN ===")
+    logger.info("=== BUSCA OTIMIZADA DE MÚLTIPLAS SÉRIES BACEN ===")
     
     # Verifica se a biblioteca sgs está disponível
     if sgs is None:
@@ -529,7 +529,6 @@ def buscar_multiplas_series_bacen(
 
 
 __all__ = [
-    "BrapiClient",
     "buscar_historico_b3",
     "buscar_series_bacen",
     "buscar_multiplas_series_bacen",

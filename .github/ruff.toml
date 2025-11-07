@@ -1,0 +1,24 @@
+# ruff.toml
+target-version = "py310"
+
+# Ignore notebooks e pasta exploratória
+extend-exclude = [
+  "explorations/**",
+  "**/*.ipynb",
+]
+
+[lint]
+# Mantém verificações essenciais (Pyflakes/Pycodestyle)
+select = ["E", "F"]
+
+# Ignorar avisos comuns do seu caso (ajuste conforme preferir)
+ignore = [
+  "F401",  # imported but unused
+  "F841",  # assigned to but never used
+  "F541",  # f-string without placeholders
+]
+
+# Ignorar regras só em certos diretórios/arquivos (recomendado)
+[lint.per-file-ignores]
+"transformacoes/*.py" = ["F401", "F841"]
+"utilitarios/*.py"    = ["F401", "F841", "F541"]

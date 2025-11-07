@@ -111,7 +111,7 @@ def buscar_historico_b3(
     # LIMITAÇÃO: Plano básico só permite 3 meses (90 dias)
     if dias_diferenca > 90:
         logger.warning(f"⚠️ ATENÇÃO: Período solicitado ({dias_diferenca} dias) excede o limite do plano básico (90 dias)")
-        logger.warning(f"Ajustando para buscar apenas os últimos 3 meses")
+        logger.warning("Ajustando para buscar apenas os últimos 3 meses")
         data_inicio = data_fim - timedelta(days=90)
         inicio_fmt = data_inicio.strftime("%Y-%m-%d")
         logger.info(f"Novo período: {data_inicio.strftime('%d/%m/%Y')} até {fim}")
@@ -282,7 +282,7 @@ def buscar_historico_b3(
         logger.error("Nenhum dado encontrado para nenhum ticker!")
         return pd.DataFrame(columns=colunas)
     
-    logger.info(f"\n=== RESUMO ===")
+    logger.info("\n=== RESUMO ===")
     logger.info(f"Tickers processados com sucesso: {len(quadros)}/{total_tickers}")
     
     resultado = pd.concat(quadros, ignore_index=True)
@@ -343,7 +343,7 @@ def buscar_series_bacen(series: Dict[str, int], inicio: str, fim: str) -> pd.Dat
         >>> df = buscar_series_bacen(series, "01/01/2024", "31/12/2024")
         >>> print(df.head())
     """
-    logger.info(f"=== INICIANDO BUSCA DE SÉRIES BACEN COM SGS ===")
+    logger.info("=== INICIANDO BUSCA DE SÉRIES BACEN COM SGS ===")
     logger.info(f"Séries solicitadas: {list(series.keys())}")
     logger.info(f"Período: {inicio} até {fim}")
     
@@ -437,7 +437,7 @@ def buscar_series_bacen(series: Dict[str, int], inicio: str, fim: str) -> pd.Dat
         logger.error("Nenhum dado encontrado para nenhuma série!")
         return pd.DataFrame(columns=["data", "valor", "serie"])
     
-    logger.info(f"\n=== CONSOLIDANDO RESULTADOS ===")
+    logger.info("\n=== CONSOLIDANDO RESULTADOS ===")
     resultado_final = pd.concat(quadros, ignore_index=True)
     
     # Ordenação final
@@ -446,7 +446,7 @@ def buscar_series_bacen(series: Dict[str, int], inicio: str, fim: str) -> pd.Dat
     logger.info(f"✓ Total de registros obtidos: {len(resultado_final)}")
     logger.info(f"✓ Séries com dados: {resultado_final['serie'].nunique()}")
     logger.info(f"✓ Período coberto: {resultado_final['data'].min()} até {resultado_final['data'].max()}")
-    logger.info(f"=== BUSCA CONCLUÍDA COM SUCESSO ===\n")
+    logger.info("=== BUSCA CONCLUÍDA COM SUCESSO ===\n")
     
     return resultado_final
 

@@ -92,7 +92,7 @@ def buscar_historico_b3(
     logger.info(f"Período: {inicio} até {fim}")
     
     # Token da API
-    BRAPI_TOKEN = api_key or "bskwmkRoxVSMKPwR5HHUSE"
+    BRAPI_TOKEN = api_key or ""
     BASE_URL = "https://brapi.dev/api/quote"
     
     # Valida datas

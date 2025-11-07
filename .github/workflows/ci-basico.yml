@@ -3,14 +3,20 @@ name: CI básico (lint e validações)
 on:
   pull_request:
     branches: [ main ]
+    # Dispara só quando .py ou configs relevantes mudarem
     paths:
       - "**/*.py"
+      - "ruff.toml"
       - "requirements.txt"
       - ".github/workflows/**"
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,17 +26,15 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Instalar dependências do lint
+      - name: Install linters
         run: |
           python -m pip install --upgrade pip
-          pip install ruff black
+          pip install ruff==0.6.9 black==24.8.0
 
-      # Verifica erros de código (imports, variáveis, más práticas) e também indentação/sintaxe
+      # Ruff usa automaticamente o arquivo ruff.toml na raiz
       - name: Ruff (lint)
-        run: |
-          ruff check . --output-format=github
+        run: ruff check .
 
-      # Garante formatação/indentação padronizada sem alterar arquivos (falha se diferente)
-      - name: Black (formatação/indentação)
-        run: |
-          black --check .
+      # Checagem de formatação/indentação (não reescreve arquivos)
+      - name: Black (format check)
+        run: black --check .

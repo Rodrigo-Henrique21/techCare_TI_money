@@ -1,0 +1,20 @@
+# .github/labeler.yml
+notebooks:
+  - "*.ipynb"
+  - "notebooks/**"
+
+analysis:
+  - "src/**"
+  - "notebooks/**analysis/**"
+
+data:
+  - "data/**"
+  - "datasets/**"
+
+docs:
+  - "docs/**"
+  - "*.md"
+
+tests:
+  - "tests/**"
+  - "*_test.py"

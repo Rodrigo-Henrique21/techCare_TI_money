@@ -3,7 +3,6 @@ name: CI básico (lint e validações)
 on:
   pull_request:
     branches: [ main ]
-    # Dispara só quando .py ou configs relevantes mudarem
     paths:
       - "**/*.py"
       - "ruff.toml"
@@ -16,7 +15,6 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,10 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff==0.6.9 black==24.8.0
 
-      # Ruff usa automaticamente o arquivo ruff.toml na raiz
+      # Ruff respeita o ruff.toml (excludes e ignores)
       - name: Ruff (lint)
         run: ruff check .
 
-      # Checagem de formatação/indentação (não reescreve arquivos)
       - name: Black (format check)
         run: black --check .

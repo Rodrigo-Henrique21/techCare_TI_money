@@ -529,7 +529,6 @@ def buscar_multiplas_series_bacen(
 
 
 __all__ = [
-    "BrapiClient",
     "buscar_historico_b3",
     "buscar_series_bacen",
     "buscar_multiplas_series_bacen",

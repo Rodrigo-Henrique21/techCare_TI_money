@@ -1,0 +1,67 @@
+table fact_indicators
+	lineageTag: 297faf08-432f-4fa8-bac5-8a34c40960b3
+
+	column ref_date
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: ccb53cc4-2b70-433b-beeb-d4fbce706bb0
+		summarizeBy: none
+		sourceColumn: ref_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column idx_value
+		dataType: double
+		sourceProviderType: double
+		lineageTag: c7355ecc-b7a2-4306-a970-8f45bdded91b
+		summarizeBy: sum
+		sourceColumn: idx_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column idx_type
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 8d45f0d4-1ccc-41d0-a2b7-2a118e9406c0
+		summarizeBy: none
+		sourceColumn: idx_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column frequency
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: dcf7e866-88f3-4317-942e-f3d3005d25c9
+		summarizeBy: none
+		sourceColumn: frequency
+
+		annotation SummarizationSetBy = Automatic
+
+	column ingestion_timestamp
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: e87474a5-3d36-4190-9d61-d9be5c819998
+		summarizeBy: none
+		sourceColumn: ingestion_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_indicators = m
+		mode: dual
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_tgt_Schema = platfunc_Database{[Name="aafn_tgt",Kind="Schema"]}[Data],
+				    tb_mkt_idx_eco_View = aafn_tgt_Schema{[Name="tb_mkt_idx_eco",Kind="View"]}[Data]
+				in
+				    tb_mkt_idx_eco_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

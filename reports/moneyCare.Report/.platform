@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "moneyCare"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "7d131123-e106-46ba-9707-62baf6a2f43a"
+  }
+}

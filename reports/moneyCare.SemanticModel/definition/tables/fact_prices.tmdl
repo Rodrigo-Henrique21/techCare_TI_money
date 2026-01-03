@@ -1,0 +1,124 @@
+table fact_prices
+	lineageTag: f3814ed6-d35e-457b-8738-cdc3b2726071
+
+	column trade_date
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: 467a9f69-6e74-47e0-884e-eaf0bfb841d7
+		summarizeBy: none
+		sourceColumn: trade_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column open_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 3398abd5-0be9-48ee-9884-8d9183726c77
+		summarizeBy: sum
+		sourceColumn: open_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column high_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: a9008303-2785-4fda-b467-cdbb6355b8bd
+		summarizeBy: sum
+		sourceColumn: high_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column low_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: fca427f1-ebc4-419f-bcfc-3384c3d97c3c
+		summarizeBy: sum
+		sourceColumn: low_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column close_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 8e9884e3-03b7-4117-8ee6-1fec2cdfb498
+		summarizeBy: sum
+		sourceColumn: close_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column volume
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 4ec1e147-cc70-42ae-be36-20e062de3a7a
+		summarizeBy: sum
+		sourceColumn: volume
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column div_cash
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 6d19a6cd-841d-4925-b44b-e724d4116bc2
+		summarizeBy: sum
+		sourceColumn: div_cash
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column split_ratio
+		dataType: double
+		sourceProviderType: double
+		lineageTag: be47fbdb-b44b-48e9-b22c-624682b496dd
+		summarizeBy: sum
+		sourceColumn: split_ratio
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column symbol
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 022353df-43a9-4289-8764-1683fc8fd354
+		summarizeBy: none
+		sourceColumn: symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column ingestion_timestamp
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: 963621fd-cc07-4d6a-944b-3a994ef763cd
+		summarizeBy: none
+		sourceColumn: ingestion_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_prices = m
+		mode: dual
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_tgt_Schema = platfunc_Database{[Name="aafn_tgt",Kind="Schema"]}[Data],
+				    tb_mkt_eqt_day_View = aafn_tgt_Schema{[Name="tb_mkt_eqt_day",Kind="View"]}[Data]
+				in
+				    tb_mkt_eqt_day_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

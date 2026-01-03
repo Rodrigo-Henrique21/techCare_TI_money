@@ -1,0 +1,24 @@
+table dim_symbols
+	lineageTag: f66b5b9d-25cb-4ae7-8d4c-70c2632f5b3f
+
+	column symbol
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 71ab182e-45df-45a1-a3e1-52d8c2bc5e3e
+		summarizeBy: none
+		sourceColumn: symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_symbols = m
+		mode: dual
+		source =
+				let
+				    Fonte = Value.NativeQuery(DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]){[Name="platfunc",Kind="Database"]}[Data], "SELECT DISTINCT#(lf)    symbol#(lf)FROM platfunc.aafn_tgt.tb_mkt_eqt_day", null, [EnableFolding=true])
+				in
+				    Fonte
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

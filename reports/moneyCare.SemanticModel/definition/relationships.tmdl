@@ -1,0 +1,27 @@
+relationship a4cd4782-d78e-d217-c4ad-0abbc4139dc7
+	relyOnReferentialIntegrity
+	fromColumn: fact_eqt_day.symbol
+	toColumn: dim_eqt.symbol
+
+relationship 4cf1ed56-757a-1f56-4c98-2ef0dcba00c6
+	relyOnReferentialIntegrity
+	fromColumn: fact_idx_eco.idx_type
+	toColumn: dim_idx_eco.idx_type
+
+relationship 75be162e-3236-6a7e-ed6e-9ed9b05c50ad
+	relyOnReferentialIntegrity
+	fromColumn: fact_fut_day.symbol
+	toColumn: dim_idx_fut.symbol
+
+relationship 70680b45-00ac-290b-c850-6bbb58912b3c
+	fromColumn: fact_eqt_day.trade_date
+	toColumn: dim_calendar.Date
+
+relationship ab9cc857-eeda-a7e9-779f-34cb588857f4
+	fromColumn: fact_fut_day.trade_date
+	toColumn: dim_calendar.Date
+
+relationship 07e80702-846b-9090-ad28-307c78bab814
+	fromColumn: fact_idx_eco.ref_date
+	toColumn: dim_calendar.Date
+

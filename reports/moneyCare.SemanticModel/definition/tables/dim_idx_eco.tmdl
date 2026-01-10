@@ -1,0 +1,81 @@
+table dim_idx_eco
+	lineageTag: 5c2a8265-dff3-4034-9e2a-1911f4d5e469
+
+	column idx_type
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 605139c1-124d-4ef9-ba80-8230e282c7a0
+		summarizeBy: none
+		sourceColumn: idx_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column current_value
+		dataType: double
+		sourceProviderType: double
+		lineageTag: f166c540-5fa5-4818-ba3c-3def9c4e2733
+		summarizeBy: none
+		sourceColumn: current_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column mtd_change
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 238e61f7-3d3c-40bc-9f80-ec8f4e4aa5de
+		summarizeBy: none
+		sourceColumn: mtd_change
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ytd_change
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 63dd381e-4c61-4003-8c5c-ea5606d16d60
+		summarizeBy: none
+		sourceColumn: ytd_change
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column trend_6m
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: eeaff513-7114-41f5-b10d-3865b28e72c4
+		summarizeBy: none
+		sourceColumn: trend_6m
+
+		annotation SummarizationSetBy = Automatic
+
+	column last_update
+		dataType: dateTime
+		formatString: Long Date
+		sourceProviderType: date
+		lineageTag: 5554e10a-4184-4268-a00e-9e791f3224ac
+		summarizeBy: none
+		sourceColumn: last_update
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	partition dim_idx_eco = m
+		mode: directQuery
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_ddm_Schema = platfunc_Database{[Name="aafn_ddm",Kind="Schema"]}[Data],
+				    tb_mkt_idx_dash_View = aafn_ddm_Schema{[Name="tb_mkt_idx_dash",Kind="View"]}[Data]
+				in
+				    tb_mkt_idx_dash_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

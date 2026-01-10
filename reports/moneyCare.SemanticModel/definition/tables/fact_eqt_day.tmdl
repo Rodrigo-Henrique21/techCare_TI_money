@@ -1,20 +1,25 @@
-table fact_prices
-	lineageTag: f3814ed6-d35e-457b-8738-cdc3b2726071
+table fact_eqt_day
+	lineageTag: 8be72c92-2bea-41dc-8d5c-1424159d9f6d
 
 	column trade_date
 		dataType: dateTime
-		formatString: General Date
-		sourceProviderType: datetime2
-		lineageTag: 467a9f69-6e74-47e0-884e-eaf0bfb841d7
+		isHidden
+		formatString: Long Date
+		sourceProviderType: date
+		lineageTag: f54fdb83-10e4-41eb-9acc-6f9f2d720ff4
 		summarizeBy: none
 		sourceColumn: trade_date
 
+		changedProperty = IsHidden
+
 		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column open_price
 		dataType: double
 		sourceProviderType: double
-		lineageTag: 3398abd5-0be9-48ee-9884-8d9183726c77
+		lineageTag: a46294a3-75f3-42f7-87b6-3fb787cd27a5
 		summarizeBy: sum
 		sourceColumn: open_price
 
@@ -25,7 +30,7 @@ table fact_prices
 	column high_price
 		dataType: double
 		sourceProviderType: double
-		lineageTag: a9008303-2785-4fda-b467-cdbb6355b8bd
+		lineageTag: 0d8983e9-925b-45f8-8172-50047b1b6535
 		summarizeBy: sum
 		sourceColumn: high_price
 
@@ -36,7 +41,7 @@ table fact_prices
 	column low_price
 		dataType: double
 		sourceProviderType: double
-		lineageTag: fca427f1-ebc4-419f-bcfc-3384c3d97c3c
+		lineageTag: 0908a36f-d34a-4c85-ac32-8d4391d0c4ec
 		summarizeBy: sum
 		sourceColumn: low_price
 
@@ -47,18 +52,18 @@ table fact_prices
 	column close_price
 		dataType: double
 		sourceProviderType: double
-		lineageTag: 8e9884e3-03b7-4117-8ee6-1fec2cdfb498
-		summarizeBy: sum
+		lineageTag: 9caff56a-86c7-484c-8f5c-bc9efa6a42ab
+		summarizeBy: none
 		sourceColumn: close_price
 
-		annotation SummarizationSetBy = Automatic
+		annotation SummarizationSetBy = User
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
 	column volume
 		dataType: double
 		sourceProviderType: double
-		lineageTag: 4ec1e147-cc70-42ae-be36-20e062de3a7a
+		lineageTag: af8374f1-7831-4f3a-915d-453e5aead75f
 		summarizeBy: sum
 		sourceColumn: volume
 
@@ -69,7 +74,7 @@ table fact_prices
 	column div_cash
 		dataType: double
 		sourceProviderType: double
-		lineageTag: 6d19a6cd-841d-4925-b44b-e724d4116bc2
+		lineageTag: 1fe7b875-4ac7-40b0-8bee-0d6524840707
 		summarizeBy: sum
 		sourceColumn: div_cash
 
@@ -80,7 +85,7 @@ table fact_prices
 	column split_ratio
 		dataType: double
 		sourceProviderType: double
-		lineageTag: be47fbdb-b44b-48e9-b22c-624682b496dd
+		lineageTag: 3e037b20-0279-45f1-b027-fd09771bedf7
 		summarizeBy: sum
 		sourceColumn: split_ratio
 
@@ -90,25 +95,18 @@ table fact_prices
 
 	column symbol
 		dataType: string
+		isHidden
 		sourceProviderType: nvarchar(65535)
-		lineageTag: 022353df-43a9-4289-8764-1683fc8fd354
+		lineageTag: 5782bb73-0854-402b-bb1a-1ed392556765
 		summarizeBy: none
 		sourceColumn: symbol
 
-		annotation SummarizationSetBy = Automatic
-
-	column ingestion_timestamp
-		dataType: dateTime
-		formatString: General Date
-		sourceProviderType: datetime2
-		lineageTag: 963621fd-cc07-4d6a-944b-3a994ef763cd
-		summarizeBy: none
-		sourceColumn: ingestion_timestamp
+		changedProperty = IsHidden
 
 		annotation SummarizationSetBy = Automatic
 
-	partition fact_prices = m
-		mode: dual
+	partition fact_eqt_day = m
+		mode: directQuery
 		source =
 				let
 				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),

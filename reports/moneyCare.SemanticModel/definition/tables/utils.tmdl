@@ -1,0 +1,44 @@
+table utils
+	lineageTag: 63fad8e6-2f87-46b1-997a-301613d4cf2f
+
+	measure 'Equity Close Price' =
+			
+			CALCULATE(
+			    LASTNONBLANKVALUE(dim_calendar[Date], AVERAGE(fact_eqt_day[close_price]))
+			)
+		lineageTag: 6666b0ec-ca0d-491b-a1b8-4484aaa7a9d6
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Equity Volume' =
+			
+			CALCULATE(
+			    LASTNONBLANKVALUE(dim_calendar[Date], AVERAGE(fact_eqt_day[volume]))
+			)
+		lineageTag: 6ae7a1f1-deeb-42cc-88bc-fede2ad9fd66
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column utils
+		dataType: string
+		isHidden
+		lineageTag: 5c8156a4-e19c-4879-aef3-1ab7ab934138
+		summarizeBy: none
+		sourceColumn: utils
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition utils = m
+		mode: import
+		source =
+				let
+				    Fonte = ""
+				in
+				    Fonte
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Text
+

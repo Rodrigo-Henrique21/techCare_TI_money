@@ -4,63 +4,123 @@
     {
       "ordinal": 0,
       "scrollPosition": {
-        "x": 284,
+        "x": 0,
         "y": 0
       },
       "nodes": [
         {
           "location": {
-            "x": 0,
-            "y": 165.375
+            "x": 875.27336776080392,
+            "y": 0
           },
-          "nodeIndex": "fact_prices",
+          "nodeIndex": "dim_idx_fut",
+          "nodeLineageTag": "f3814ed6-d35e-457b-8738-cdc3b2726071",
           "size": {
-            "height": 300,
+            "height": 104,
             "width": 234
           },
-          "zIndex": 1
+          "zIndex": 5,
+          "expandedHeight": 300
         },
         {
           "location": {
-            "x": 284,
-            "y": 215.375
+            "x": 432.05746378553465,
+            "y": 212.09317801842747
           },
-          "nodeIndex": "fact_indicators",
+          "nodeIndex": "fact_idx_eco",
+          "nodeLineageTag": "297faf08-432f-4fa8-bac5-8a34c40960b3",
+          "size": {
+            "height": 128,
+            "width": 310.10398995090031
+          },
+          "zIndex": 6,
+          "expandedHeight": 200
+        },
+        {
+          "location": {
+            "x": 0,
+            "y": 0
+          },
+          "nodeIndex": "dim_eqt",
+          "nodeLineageTag": "50f42dfd-e1e4-43ec-a099-ada80701b478",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 1,
+          "expandedHeight": 224
+        },
+        {
+          "location": {
+            "x": 465.80397599381735,
+            "y": 0
+          },
+          "nodeIndex": "dim_idx_eco",
+          "nodeLineageTag": "5c2a8265-dff3-4034-9e2a-1911f4d5e469",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 4,
+          "expandedHeight": 224
+        },
+        {
+          "location": {
+            "x": 0,
+            "y": 203.07148436806716
+          },
+          "nodeIndex": "fact_eqt_day",
+          "nodeLineageTag": "8be72c92-2bea-41dc-8d5c-1424159d9f6d",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 2,
+          "expandedHeight": 296
+        },
+        {
+          "location": {
+            "x": 867.502664619628,
+            "y": 215.16481584045604
+          },
+          "nodeIndex": "fact_fut_day",
+          "nodeLineageTag": "5e7bf8f3-cc2b-45c7-b34c-c734ea0d8de3",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 3,
+          "expandedHeight": 300
+        },
+        {
+          "location": {
+            "x": 472.2040876504808,
+            "y": 480.97301894465738
+          },
+          "nodeIndex": "dim_calendar",
+          "nodeLineageTag": "55635458-2899-41a2-b4b4-11e2268328f7",
           "size": {
             "height": 200,
             "width": 234
           },
-          "zIndex": 4
+          "zIndex": 7
         },
         {
           "location": {
-            "x": 568,
-            "y": 189.875
+            "x": 1159.2733677608039,
+            "y": 288.48650947232869
           },
-          "nodeIndex": "dim_symbols",
-          "nodeLineageTag": "f66b5b9d-25cb-4ae7-8d4c-70c2632f5b3f",
+          "nodeIndex": "utils",
+          "nodeLineageTag": "63fad8e6-2f87-46b1-997a-301613d4cf2f",
           "size": {
             "height": 104,
             "width": 234
           },
-          "zIndex": 3
-        },
-        {
-          "location": {
-            "x": 852,
-            "y": 153.125
-          },
-          "nodeIndex": "dim_indicators",
-          "nodeLineageTag": "892d8d75-1ac1-46d1-a088-45b8aa4f3630",
-          "size": {
-            "height": 104,
-            "width": 234
-          },
-          "zIndex": 2
+          "zIndex": 0
         }
       ],
       "name": "Todas as tabelas",
-      "zoomValue": 100,
+      "zoomValue": 70.955543900968863,
       "pinKeyFieldsToTop": false,
       "showExtraHeaderInfo": false,
       "hideKeyFieldsWhenCollapsed": false,

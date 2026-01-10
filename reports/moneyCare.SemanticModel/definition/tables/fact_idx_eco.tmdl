@@ -1,15 +1,20 @@
-table fact_indicators
+table fact_idx_eco
 	lineageTag: 297faf08-432f-4fa8-bac5-8a34c40960b3
 
 	column ref_date
 		dataType: dateTime
-		formatString: General Date
-		sourceProviderType: datetime2
+		isHidden
+		formatString: Long Date
+		sourceProviderType: date
 		lineageTag: ccb53cc4-2b70-433b-beeb-d4fbce706bb0
 		summarizeBy: none
 		sourceColumn: ref_date
 
+		changedProperty = IsHidden
+
 		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
 
 	column idx_value
 		dataType: double
@@ -24,10 +29,13 @@ table fact_indicators
 
 	column idx_type
 		dataType: string
+		isHidden
 		sourceProviderType: nvarchar(65535)
 		lineageTag: 8d45f0d4-1ccc-41d0-a2b7-2a118e9406c0
 		summarizeBy: none
 		sourceColumn: idx_type
+
+		changedProperty = IsHidden
 
 		annotation SummarizationSetBy = Automatic
 
@@ -40,18 +48,8 @@ table fact_indicators
 
 		annotation SummarizationSetBy = Automatic
 
-	column ingestion_timestamp
-		dataType: dateTime
-		formatString: General Date
-		sourceProviderType: datetime2
-		lineageTag: e87474a5-3d36-4190-9d61-d9be5c819998
-		summarizeBy: none
-		sourceColumn: ingestion_timestamp
-
-		annotation SummarizationSetBy = Automatic
-
-	partition fact_indicators = m
-		mode: dual
+	partition fact_idx_eco = m
+		mode: directQuery
 		source =
 				let
 				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),

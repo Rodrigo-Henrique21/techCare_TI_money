@@ -1,0 +1,81 @@
+table dim_eqt
+	lineageTag: 50f42dfd-e1e4-43ec-a099-ada80701b478
+
+	column symbol
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: e9ff04e9-5a53-4970-99d6-ce1bd7d8172b
+		summarizeBy: none
+		sourceColumn: symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column monthly_return
+		dataType: double
+		formatString: 0.00%;-0.00%;0.00%
+		sourceProviderType: double
+		lineageTag: 19ccb551-df0a-4d9c-b550-6af481f8f2bb
+		summarizeBy: sum
+		sourceColumn: monthly_return
+
+		annotation SummarizationSetBy = User
+
+	column volatility
+		dataType: double
+		formatString: 0.00%;-0.00%;0.00%
+		sourceProviderType: double
+		lineageTag: 05adaea6-68bc-4a9e-9ee1-04ed4e338359
+		summarizeBy: sum
+		sourceColumn: volatility
+
+		annotation SummarizationSetBy = User
+
+	column avg_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 3a64d6d1-70a4-4518-a70d-a4cfaa821b0b
+		summarizeBy: average
+		sourceColumn: avg_price
+
+		annotation SummarizationSetBy = User
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column avg_volume
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 588dd960-e9b4-4940-b3e3-c22fd4572861
+		summarizeBy: sum
+		sourceColumn: avg_volume
+
+		annotation SummarizationSetBy = User
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column last_update
+		dataType: dateTime
+		formatString: Long Date
+		sourceProviderType: date
+		lineageTag: 566058b8-8735-4717-8dee-16c290420530
+		summarizeBy: none
+		sourceColumn: last_update
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	partition dim_eqt = m
+		mode: directQuery
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_ddm_Schema = platfunc_Database{[Name="aafn_ddm",Kind="Schema"]}[Data],
+				    tb_mkt_eqt_perf_View = aafn_ddm_Schema{[Name="tb_mkt_eqt_perf",Kind="View"]}[Data]
+				in
+				    tb_mkt_eqt_perf_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

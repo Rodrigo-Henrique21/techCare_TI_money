@@ -1,0 +1,200 @@
+table fact_fut_day
+	lineageTag: 5e7bf8f3-cc2b-45c7-b34c-c734ea0d8de3
+
+	column trade_datetime
+		dataType: dateTime
+		formatString: General Date
+		sourceProviderType: datetime2
+		lineageTag: 75bbc5d1-7eb2-464a-998f-6a7b03e959ab
+		summarizeBy: none
+		sourceColumn: trade_datetime
+
+		annotation SummarizationSetBy = Automatic
+
+	column trade_date
+		dataType: dateTime
+		isHidden
+		formatString: Long Date
+		sourceProviderType: date
+		lineageTag: 9de8f948-2c22-402a-b554-1898bc084395
+		summarizeBy: none
+		sourceColumn: trade_date
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column open_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: c8a34771-95e9-49ef-9021-f2dc6540c74a
+		summarizeBy: sum
+		sourceColumn: open_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column high_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 9a352bcf-34ee-4933-badb-716389f2efb7
+		summarizeBy: sum
+		sourceColumn: high_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column low_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: c7278b70-f82f-4182-b072-238a71eb084a
+		summarizeBy: sum
+		sourceColumn: low_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column close_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 9cf761ad-c715-429c-9a5c-15128292c754
+		summarizeBy: none
+		sourceColumn: close_price
+
+		annotation SummarizationSetBy = User
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column prev_close_price
+		dataType: double
+		sourceProviderType: double
+		lineageTag: f740bddc-75eb-4103-b011-6cc4507d9ae6
+		summarizeBy: sum
+		sourceColumn: prev_close_price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column abs_change
+		dataType: double
+		sourceProviderType: double
+		lineageTag: fc486829-d0de-4649-b40e-6db810c0465a
+		summarizeBy: sum
+		sourceColumn: abs_change
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column pct_change
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 3a2438ad-dab1-43b5-9d64-d38fe177b938
+		summarizeBy: sum
+		sourceColumn: pct_change
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column volume
+		dataType: int64
+		formatString: 0
+		sourceProviderType: bigint
+		lineageTag: 7df9878c-b942-45d8-936c-db7c1fd818eb
+		summarizeBy: sum
+		sourceColumn: volume
+
+		annotation SummarizationSetBy = Automatic
+
+	column symbol
+		dataType: string
+		isHidden
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 06ac2c4c-3a79-4716-8344-ea4746911fdf
+		summarizeBy: none
+		sourceColumn: symbol
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column index_name
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: f888d156-dee0-4d75-b8ea-292d4dc31eda
+		summarizeBy: none
+		sourceColumn: index_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column region
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: e8d4e6d0-ef62-4131-ac71-62fd747b30b9
+		summarizeBy: none
+		sourceColumn: region
+
+		annotation SummarizationSetBy = Automatic
+
+	column category
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 5485b7cb-33cb-4876-971f-9270350026e7
+		summarizeBy: none
+		sourceColumn: category
+
+		annotation SummarizationSetBy = Automatic
+
+	column currency
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 60d21c19-f48f-4a27-908c-d1d73a449b3b
+		summarizeBy: none
+		sourceColumn: currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column price_52w_high
+		dataType: double
+		sourceProviderType: double
+		lineageTag: c5a97b8e-8d61-4afa-9c3b-34f5b0ff4bea
+		summarizeBy: sum
+		sourceColumn: price_52w_high
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column price_52w_low
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 0ce88538-70d3-4f69-9ecf-47b299146d04
+		summarizeBy: sum
+		sourceColumn: price_52w_low
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fact_fut_day = m
+		mode: directQuery
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_tgt_Schema = platfunc_Database{[Name="aafn_tgt",Kind="Schema"]}[Data],
+				    tb_mkt_idx_fut_day_View = aafn_tgt_Schema{[Name="tb_mkt_idx_fut_day",Kind="View"]}[Data]
+				in
+				    tb_mkt_idx_fut_day_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+

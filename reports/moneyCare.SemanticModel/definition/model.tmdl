@@ -8,14 +8,18 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["fact_prices","fact_indicators","dim_symbols","dim_indicators"]
+annotation PBI_QueryOrder = ["dim_idx_fut","dim_idx_eco","dim_eqt","fact_idx_eco","fact_eqt_day","fact_fut_day","utils"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
-ref table fact_prices
-ref table fact_indicators
-ref table dim_symbols
-ref table dim_indicators
+ref table dim_idx_fut
+ref table fact_idx_eco
+ref table dim_idx_eco
+ref table dim_eqt
+ref table fact_eqt_day
+ref table fact_fut_day
+ref table dim_calendar
+ref table utils
 
 ref cultureInfo pt-BR
 

@@ -1,0 +1,174 @@
+table dim_idx_fut
+	lineageTag: f3814ed6-d35e-457b-8738-cdc3b2726071
+
+	column symbol
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 022353df-43a9-4289-8764-1683fc8fd354
+		summarizeBy: none
+		sourceColumn: symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column index_name
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: d24f2046-8ea1-4676-821e-50f0eaddc6e5
+		summarizeBy: none
+		sourceColumn: index_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column region
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 2b569197-506a-494f-8eb7-59849d12126d
+		summarizeBy: none
+		sourceColumn: region
+
+		annotation SummarizationSetBy = Automatic
+
+	column category
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: 94317365-e978-4694-80d2-0a6f4b546aa5
+		summarizeBy: none
+		sourceColumn: category
+
+		annotation SummarizationSetBy = Automatic
+
+	column currency
+		dataType: string
+		sourceProviderType: nvarchar(65535)
+		lineageTag: dd8b1a42-e05f-4ce7-abf1-9671ffc10055
+		summarizeBy: none
+		sourceColumn: currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column monthly_return
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 8f515b17-b6a4-40a7-8689-1ab4451fcf41
+		summarizeBy: none
+		sourceColumn: monthly_return
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ytd_return
+		dataType: double
+		sourceProviderType: double
+		lineageTag: b4973a79-c743-43f8-a09a-1faea9efb9cb
+		summarizeBy: none
+		sourceColumn: ytd_return
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column volatility
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 3f2c737c-3164-4e95-8d9c-e3378da2feb0
+		summarizeBy: none
+		sourceColumn: volatility
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column avg_price_30d
+		dataType: double
+		sourceProviderType: double
+		lineageTag: ebf27f4e-e04d-4d3e-b742-01de31fb3e14
+		summarizeBy: none
+		sourceColumn: avg_price_30d
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column last_close
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 1fae2245-d3c8-482f-ba57-58763969554c
+		summarizeBy: none
+		sourceColumn: last_close
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column price_52w_high
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 88020cb5-77ef-436e-8a86-ba82fba7754d
+		summarizeBy: none
+		sourceColumn: price_52w_high
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column price_52w_low
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 2b23f28a-afd5-48f9-828e-9c148c3016d6
+		summarizeBy: none
+		sourceColumn: price_52w_low
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column pct_from_52w_high
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 2f662bf5-8f6e-4720-bd67-73528332bdae
+		summarizeBy: none
+		sourceColumn: pct_from_52w_high
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column pct_from_52w_low
+		dataType: double
+		sourceProviderType: double
+		lineageTag: 98004e3e-8c26-4398-a400-8fd2b36e4ef5
+		summarizeBy: none
+		sourceColumn: pct_from_52w_low
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column last_update
+		dataType: dateTime
+		formatString: Long Date
+		sourceProviderType: date
+		lineageTag: 446c38c7-460b-4123-b77c-886d9cb66c62
+		summarizeBy: none
+		sourceColumn: last_update
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	partition dim_idx_fut = m
+		mode: directQuery
+		source =
+				let
+				    Fonte = DatabricksMultiCloud.Catalogs("dbc-de7dab16-3153.cloud.databricks.com", "/sql/1.0/warehouses/ad147cbfb6e332b3", [Catalog="platfunc", Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation=null]),
+				    platfunc_Database = Fonte{[Name="platfunc",Kind="Database"]}[Data],
+				    aafn_ddm_Schema = platfunc_Database{[Name="aafn_ddm",Kind="Schema"]}[Data],
+				    tb_mkt_idx_fut_perf_View = aafn_ddm_Schema{[Name="tb_mkt_idx_fut_perf",Kind="View"]}[Data]
+				in
+				    tb_mkt_idx_fut_perf_View
+
+	annotation PBI_NavigationStepName = Navegação
+
+	annotation PBI_ResultType = Table
+
